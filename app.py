@@ -43,6 +43,11 @@ st.markdown("""
         border-top: 5px solid #059669; 
         transition: all 0.3s ease;
     }
+    div[data-testid="metric-container"]:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        border-top: 5px solid #047857; 
+    }
     
     /* Teks dalam Metrik Desktop */
     [data-testid="stMetricValue"] {
@@ -61,32 +66,32 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     
-    /* --- PERBAIKAN HEADER & TOMBOL MENU (FOOLPROOF) --- */
+    /* --- PERBAIKAN HEADER & TOMBOL MENU (HIJAU KONTRAS) --- */
     header {
-        background-color: #FFFFFF !important; 
-        border-bottom: 1px solid #E2E8F0 !important;
+        background-color: #059669 !important; /* Warna Hijau Zamrud */
+        border-bottom: none !important;
         z-index: 99999 !important;
     } 
     
-    /* Memaksa tombol menu (garis tiga) menjadi warna hitam pekat dan berbentuk tombol */
+    /* Memaksa tombol menu (garis tiga) menjadi PUTIH agar sangat jelas di atas warna hijau */
     [data-testid="collapsedControl"] {
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
-        background-color: #F1F5F9 !important; /* Latar abu-abu terang agar menonjol */
-        border: 1px solid #CBD5E1 !important;
+        background-color: transparent !important;
+        border: none !important;
         border-radius: 6px !important;
         padding: 4px !important;
         margin-left: 10px !important;
         margin-top: 10px !important;
         z-index: 999999 !important;
-        color: #000000 !important;
+        color: #FFFFFF !important;
     }
     
     [data-testid="collapsedControl"] svg,
     [data-testid="collapsedControl"] path {
-        fill: #000000 !important;
-        color: #000000 !important;
+        fill: #FFFFFF !important;
+        color: #FFFFFF !important;
     }
     /* --------------------------------------------------- */
     
