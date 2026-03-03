@@ -43,11 +43,6 @@ st.markdown("""
         border-top: 5px solid #059669; 
         transition: all 0.3s ease;
     }
-    div[data-testid="metric-container"]:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-        border-top: 5px solid #047857; 
-    }
     
     /* Teks dalam Metrik Desktop */
     [data-testid="stMetricValue"] {
@@ -60,29 +55,43 @@ st.markdown("""
         font-weight: 600 !important;
         color: #64748B !important;
     }
-    [data-testid="stMetricDelta"] {
-        font-size: 1rem !important;
-        font-weight: 500 !important;
-    }
     
     h1, h2, h3 { color: #0F172A; font-weight: 700; }
     
-    /* PERBAIKAN HEADER: Warna putih solid dan tombol garis 3 menjadi HITAM */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
+    
+    /* --- PERBAIKAN HEADER & TOMBOL MENU (FOOLPROOF) --- */
     header {
         background-color: #FFFFFF !important; 
         border-bottom: 1px solid #E2E8F0 !important;
+        z-index: 99999 !important;
     } 
     
-    /* Memaksa tombol menu (garis tiga) menjadi warna hitam */
-    header button, header button svg, [data-testid="collapsedControl"] svg {
+    /* Memaksa tombol menu (garis tiga) menjadi warna hitam pekat dan berbentuk tombol */
+    [data-testid="collapsedControl"] {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        background-color: #F1F5F9 !important; /* Latar abu-abu terang agar menonjol */
+        border: 1px solid #CBD5E1 !important;
+        border-radius: 6px !important;
+        padding: 4px !important;
+        margin-left: 10px !important;
+        margin-top: 10px !important;
+        z-index: 999999 !important;
         color: #000000 !important;
-        fill: #000000 !important;
     }
     
+    [data-testid="collapsedControl"] svg,
+    [data-testid="collapsedControl"] path {
+        fill: #000000 !important;
+        color: #000000 !important;
+    }
+    /* --------------------------------------------------- */
+    
     .block-container {
-        padding-top: 4rem; 
+        padding-top: 4.5rem; 
         padding-bottom: 2rem;
     }
 
@@ -103,7 +112,7 @@ st.markdown("""
         }
         
         .block-container {
-            padding-top: 3.5rem; 
+            padding-top: 4.5rem; 
             padding-left: 1rem;
             padding-right: 1rem;
         }
