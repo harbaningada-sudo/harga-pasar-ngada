@@ -67,7 +67,7 @@ st.markdown("""
     
     h1, h2, h3 { color: #0F172A; font-weight: 700; }
     
-    /* PERBAIKAN HEADER: Warna putih solid agar tombol menu terlihat sangat jelas */
+    /* PERBAIKAN HEADER: Warna putih solid dan tombol garis 3 menjadi HITAM */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {
@@ -75,8 +75,14 @@ st.markdown("""
         border-bottom: 1px solid #E2E8F0 !important;
     } 
     
+    /* Memaksa tombol menu (garis tiga) menjadi warna hitam */
+    header button, header button svg, [data-testid="collapsedControl"] svg {
+        color: #000000 !important;
+        fill: #000000 !important;
+    }
+    
     .block-container {
-        padding-top: 4rem; /* Jarak atas ditambah agar konten tidak tertutup header putih */
+        padding-top: 4rem; 
         padding-bottom: 2rem;
     }
 
