@@ -67,13 +67,16 @@ st.markdown("""
     
     h1, h2, h3 { color: #0F172A; font-weight: 700; }
     
-    /* PERBAIKAN: Memunculkan menu HP dengan membuat header transparan */
+    /* PERBAIKAN HEADER: Warna putih solid agar tombol menu terlihat sangat jelas */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {background-color: transparent !important;} 
+    header {
+        background-color: #FFFFFF !important; 
+        border-bottom: 1px solid #E2E8F0 !important;
+    } 
     
     .block-container {
-        padding-top: 2rem;
+        padding-top: 4rem; /* Jarak atas ditambah agar konten tidak tertutup header putih */
         padding-bottom: 2rem;
     }
 
@@ -94,7 +97,7 @@ st.markdown("""
         }
         
         .block-container {
-            padding-top: 3rem; /* Memberikan ruang ekstra di HP agar tombol menu tidak menutupi judul */
+            padding-top: 3.5rem; 
             padding-left: 1rem;
             padding-right: 1rem;
         }
