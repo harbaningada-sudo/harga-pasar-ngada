@@ -4,7 +4,6 @@ import plotly.express as px
 import os
 
 # --- KONFIGURASI HALAMAN ---
-# initial_sidebar_state="auto" agar otomatis menyembunyikan sidebar di layar HP
 st.set_page_config(
     page_title="Dashboard Ekonomi Ngada", 
     page_icon="🏛️", 
@@ -68,9 +67,10 @@ st.markdown("""
     
     h1, h2, h3 { color: #0F172A; font-weight: 700; }
     
+    /* PERBAIKAN: Memunculkan menu HP dengan membuat header transparan */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
+    header {background-color: transparent !important;} 
     
     .block-container {
         padding-top: 2rem;
@@ -81,24 +81,20 @@ st.markdown("""
        MEDIA QUERIES (KHUSUS UNTUK TAMPILAN HP)
        ========================================= */
     @media (max-width: 768px) {
-        /* Mengecilkan judul di HP */
         h1 { font-size: 1.5rem !important; }
         h2 { font-size: 1.3rem !important; }
         h3 { font-size: 1.1rem !important; }
         
-        /* Mengecilkan angka harga agar tidak keluar kotak di layar HP */
         [data-testid="stMetricValue"] {
             font-size: 1.5rem !important;
         }
         
-        /* Mengurangi jarak padding kotak di HP */
         div[data-testid="metric-container"] {
             padding: 15px 12px;
         }
         
-        /* Mengurangi jarak tepi halaman di HP */
         .block-container {
-            padding-top: 1rem;
+            padding-top: 3rem; /* Memberikan ruang ekstra di HP agar tombol menu tidak menutupi judul */
             padding-left: 1rem;
             padding-right: 1rem;
         }
@@ -187,7 +183,6 @@ else:
         st.subheader("📋 Rekapitulasi Harga Lengkap")
         
         with st.container():
-            # Kolom filter akan otomatis bertumpuk (stack) di layar HP
             col_search, col_filter = st.columns([2, 1])
             with col_search:
                 search_term = st.text_input("🔍 Pencarian:", placeholder="Ketik nama komoditas (misal: Beras, Cabai)")
@@ -247,7 +242,7 @@ else:
                 plot_bgcolor='rgba(0,0,0,0)', 
                 paper_bgcolor='rgba(0,0,0,0)',
                 legend_title="<b>Keterangan</b>",
-                margin=dict(t=30, b=0, l=0, r=0) # Margin disesuaikan agar pas di HP
+                margin=dict(t=30, b=0, l=0, r=0) 
             )
             fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='#E2E8F0')
             
