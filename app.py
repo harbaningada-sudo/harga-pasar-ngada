@@ -6,104 +6,119 @@ import os
 # --- KONFIGURASI HALAMAN ---
 st.set_page_config(page_title="Dashboard Ekonomi Ngada", page_icon="🏛️", layout="wide", initial_sidebar_state="auto")
 
-# --- CSS KUSTOM MODERN & RESPONSIVE ---
+# --- CSS KUSTOM ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
     .stApp { background-color: #F8FAFC; }
-    header { background-color: #059669 !important; border-bottom: none !important; z-index: 99999 !important; } 
-    [data-testid="collapsedControl"] { color: #FFFFFF !important; fill: #FFFFFF !important; }
+    [data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid #E2E8F0; }
     
-    /* Desain Tabel Laporan */
+    /* Header Hijau & Tombol Menu Putih */
+    header { background-color: #059669 !important; border-bottom: none !important; z-index: 99999 !important; } 
+    [data-testid="collapsedControl"] { color: #FFFFFF !important; }
+    [data-testid="collapsedControl"] svg { fill: #FFFFFF !important; }
+    
+    /* Desain Tabel Laporan Formal */
     .tabel-laporan {
         width: 100%; border-collapse: collapse; font-size: 0.95rem;
-        color: #0F172A; background-color: #FFFFFF;
+        color: #0F172A; background-color: #FFFFFF; margin-top: 10px;
     }
-    .tabel-laporan th { background-color: #059669; color: #FFFFFF; padding: 12px; border: 1px solid #CBD5E1; }
-    .tabel-laporan td { padding: 10px; border: 1px solid #CBD5E1; vertical-align: top; }
+    .tabel-laporan th { background-color: #059669; color: #FFFFFF; padding: 12px; text-align: left; border: 1px solid #CBD5E1; }
+    .tabel-laporan td { padding: 12px; border: 1px solid #CBD5E1; vertical-align: top; }
     
-    div[data-testid="metric-container"] {
-        background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px;
-        padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-top: 5px solid #059669;
-    }
+    .block-container { padding-top: 4.5rem; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- FUNGSI MEMUAT DATA HARGA ---
-@st.cache_data(ttl=300)
+# --- FUNGSI MEMUAT DATA ---
+@st.cache_data(ttl=600)
 def load_data_harga():
-    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR54g3RrvlqqZ3ppTrKiKK-L1fVT8YSvnXfihtO-H795s0KQ6H_TewZLFFAXPi-ktMizomg3JHdIIjI/pub?gid=929993273&single=true&output=csv"
-    df = pd.read_csv(url)
-    # Bersihkan angka
-    for col in ['HARGA KEMARIN', 'HARGA HARI INI', 'SELISIH (Rp)']:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+    url_harga = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR54g3RrvlqqZ3ppTrKiKK-L1fVT8YSvnXfihtO-H795s0KQ6H_TewZLFFAXPi-ktMizomg3JHdIIjI/pub?gid=929993273&single=true&output=csv"
+    df = pd.read_csv(url_harga)
+    df['HARGA KEMARIN'] = pd.to_numeric(df['HARGA KEMARIN'], errors='coerce').fillna(0)
+    df['HARGA HARI INI'] = pd.to_numeric(df['HARGA HARI INI'], errors='coerce').fillna(0)
+    df['SELISIH (Rp)'] = pd.to_numeric(df['SELISIH (Rp)'], errors='coerce').fillna(0)
     return df
 
-# --- FUNGSI MEMUAT DATA KEGIATAN (DIPERBAIKI) ---
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=600)
 def load_data_kegiatan():
-    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT2LMrwn5xk782uKyRGkeOzCXt3DDK-iBxe_F8RUkI7Zk4iYgMVcE_f0XbSc8R72Q/pub?gid=201409714&single=true&output=csv"
-    # Tarik data asli tanpa skip dulu untuk cek kolom
-    df = pd.read_csv(url, skiprows=2)
-    
-    # Deteksi kolom secara otomatis berdasarkan urutan (agar tidak error jika nama berubah)
-    # Biasanya: 0=No, 1=Kegiatan, 2=Tahap, 3=Uraian, 4=Keterangan
-    if len(df.columns) >= 5:
-        df.columns = ['No', 'Kegiatan', 'Tahap', 'Uraian Pelaksanaan', 'Keterangan']
-    
-    # Efek Merge Cell: Isi baris kosong di bawah 'No' dan 'Kegiatan'
-    df['No'] = df['No'].ffill()
-    df['Kegiatan'] = df['Kegiatan'].ffill()
-    
+    url_kegiatan = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT2LMrwn5xk782uKyRGkeOzCXt3DDK-iBxe_F8RUkI7Zk4iYgMVcE_f0XbSc8R72Q/pub?gid=201409714&single=true&output=csv"
+    df = pd.read_csv(url_kegiatan, skiprows=2)
+    if 'Unnamed: 3' in df.columns: df = df.rename(columns={'Unnamed: 3': 'Uraian Pelaksanaan'})
+    if 'Kegiatan' in df.columns: df['Kegiatan'] = df['Kegiatan'].ffill() 
+    if 'No' in df.columns: df['No'] = df['No'].ffill()
     return df.fillna("")
 
-# Muat data
 try:
     df_harga = load_data_harga()
     df_kegiatan = load_data_kegiatan()
-    data_ok = True
+    data_tersedia = True
 except Exception as e:
-    st.error(f"Koneksi Data Terputus: {e}")
-    data_ok = False
+    data_tersedia = False
+    pesan_error = e
 
 # --- SIDEBAR ---
 with st.sidebar:
+    st.markdown("<br>", unsafe_allow_html=True)
     if os.path.exists("logo_ngada.png"):
-        st.image("logo_ngada.png", width=100)
-    st.title("PEMKAB NGADA")
-    st.write("Bagian Perekonomian & SDA")
+        st.image("logo_ngada.png", use_container_width=True)
+    st.markdown("<h3 style='text-align: center; color: #059669;'>PEMKAB NGADA</h3>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; font-size: 0.85rem; color: #64748B;'>Bagian Perekonomian & SDA</p>", unsafe_allow_html=True)
     st.divider()
-    pilihan = st.radio("Navigasi:", ["📊 Dashboard", "📈 Analisis", "📋 Laporan Kinerja"])
+    pilihan = st.radio("Navigasi Menu:", ["📊 Dashboard Utama", "📈 Analisis Harga", "📋 Laporan Kinerja", "📥 Pusat Unduhan", "ℹ️ Informasi Layanan"])
 
 # --- KONTEN ---
-if data_ok:
-    if pilihan == "📊 Dashboard":
-        st.title("📊 Dashboard Harga")
-        # Menampilkan 3 kartu teratas
-        c1, c2, c3 = st.columns(3)
-        for i, col in enumerate([c1, c2, c3]):
-            if i < len(df_harga):
-                row = df_harga.iloc[i]
-                col.metric(f"{row['KOMODITAS']}", f"Rp {int(row['HARGA HARI INI']):,}", f"{row['STATUS']}")
+if data_tersedia:
+    if pilihan == "📊 Dashboard Utama":
+        st.title("📊 Pemantauan Harga Komoditas")
         st.divider()
+        # Ringkasan Metrik
+        df_highlight = df_harga.head(3)
+        cols = st.columns(3)
+        for i, col in enumerate(cols):
+            item = df_highlight.iloc[i]
+            col.metric(label=item['KOMODITAS'], value=f"Rp {int(item['HARGA HARI INI']):,}".replace(',', '.'), delta=f"Rp {int(item['SELISIH (Rp)'])}")
+        st.markdown("<br>", unsafe_allow_html=True)
         st.dataframe(df_harga, use_container_width=True, hide_index=True)
 
-    elif pilihan == "📈 Analisis":
-        st.title("📈 Tren Harga")
-        komo = st.multiselect("Pilih Barang:", df_harga['KOMODITAS'].unique(), default=df_harga['KOMODITAS'].unique()[:3])
-        df_f = df_harga[df_harga['KOMODITAS'].isin(komo)]
-        fig = px.bar(df_f, x='KOMODITAS', y=['HARGA KEMARIN', 'HARGA HARI INI'], barmode='group')
+    elif pilihan == "📈 Analisis Harga":
+        st.title("📈 Komparasi Harga")
+        st.divider()
+        fig = px.bar(df_harga.head(10), x='KOMODITAS', y='HARGA HARI INI', color_discrete_sequence=['#059669'])
         st.plotly_chart(fig, use_container_width=True)
 
     elif pilihan == "📋 Laporan Kinerja":
-        st.title("📋 Laporan Kegiatan")
-        
-        # Proses "Merge Cell" visual (hapus teks duplikat agar rapi)
-        df_view = df_kegiatan.copy()
-        mask = df_view['No'].duplicated()
-        df_view.loc[mask, ['No', 'Kegiatan']] = ""
-        
-        # Tampilkan tabel HTML
-        st.markdown(df_view.to_html(classes="tabel-laporan", index=False), unsafe_allow_html=True)
+        st.title("📋 Dokumentasi Tindak Lanjut")
+        st.divider()
+        df_tampil = df_kegiatan.copy()
+        mask = df_tampil['No'].duplicated()
+        df_tampil.loc[mask, 'No'] = ""
+        df_tampil.loc[mask, 'Kegiatan'] = ""
+        html_table = df_tampil.to_html(classes="tabel-laporan", index=False, escape=False)
+        st.markdown(html_table, unsafe_allow_html=True)
+
+    elif pilihan == "📥 Pusat Unduhan":
+        st.title("📥 Pusat Unduhan")
+        st.markdown("Silakan unduh data laporan dalam format CSV di bawah ini:")
+        st.divider()
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("Data Harga")
+            st.download_button("⬇️ Unduh CSV Harga", data=df_harga.to_csv(index=False).encode('utf-8'), file_name='Harga_Ngada.csv', mime='text/csv', use_container_width=True)
+        with col2:
+            st.subheader("Data Laporan")
+            st.download_button("⬇️ Unduh CSV Laporan", data=df_kegiatan.to_csv(index=False).encode('utf-8'), file_name='Laporan_Kegiatan.csv', mime='text/csv', use_container_width=True)
+
+    elif pilihan == "ℹ️ Informasi Layanan":
+        st.title("ℹ️ Latar Belakang Pembuatan")
+        st.divider()
+        st.markdown("""
+        <div style='background-color: white; padding: 25px; border-radius: 12px; border: 1px solid #E2E8F0;'>
+            <h3 style='color: #059669;'>Tujuan Aplikasi</h3>
+            <p>Aplikasi Dashboard Ekonomi Ngada ini dibangun sebagai bagian dari <b>Proyek Aktualisasi CPNS</b> di Bagian Perekonomian dan SDA Kabupaten Ngada.</p>
+            <p>Fokus utama aplikasi ini adalah untuk menyediakan data harga pasar yang transparan dan laporan kinerja yang akuntabel bagi pimpinan dan masyarakat.</p>
+        </div>
+        """, unsafe_allow_html=True)
+else:
+    st.error(f"Koneksi Gagal: {pesan_error}")
