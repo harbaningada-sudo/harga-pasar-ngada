@@ -11,23 +11,20 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# --- 2. CSS KUSTOM (DESAIN MODERN & EMOSIONAL) ---
+# --- 2. CSS KUSTOM ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
     .stApp { background-color: #F8FAFC; }
-    
     header { background-color: #059669 !important; z-index: 99999 !important; } 
     [data-testid="collapsedControl"] { color: #FFFFFF !important; }
     [data-testid="collapsedControl"] svg { fill: #FFFFFF !important; }
-    
     .hero-section {
         background: linear-gradient(135deg, #059669 0%, #10B981 100%);
         padding: 45px; border-radius: 20px; color: white;
         margin-bottom: 30px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
     }
-
     .card-container {
         background: white; padding: 25px; border-radius: 15px;
         border: 1px solid #E2E8F0; margin-bottom: 20px;
@@ -41,23 +38,15 @@ st.markdown("""
 # --- 3. FUNGSI MEMUAT DATA ---
 @st.cache_data(ttl=60)
 def load_all_data():
-    # Data Harga
     url_h = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR54g3RrvlqqZ3ppTrKiKK-L1fVT8YSvnXfihtO-H795s0KQ6H_TewZLFFAXPi-ktMizomg3JHdIIjI/pub?gid=929993273&single=true&output=csv"
     df_h = pd.read_csv(url_h)
     df_h['HARGA HARI INI'] = pd.to_numeric(df_h['HARGA HARI INI'], errors='coerce').fillna(0)
     
-    # Data Berita (Tab Laporan Kegiatan)
-    # Kita mulai baca dari baris ke-3 sesuai foto Excel Anda
     url_b = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT2LMrwn5xk782uKyRGkeOzCXt3DDK-iBxe_F8RUkI7Zk4iYgMVcE_f0XbSc8R72Q/pub?gid=201409714&single=true&output=csv"
     df_b = pd.read_csv(url_b, skiprows=2) 
-    
-    # Memaksa nama kolom sesuai urutan A, B, C, D, E di foto
     df_b.columns = ["No", "Kegiatan", "Tipe", "Link", "Tanggal"]
-    
-    # Filter baris kosong
     df_b = df_b.dropna(subset=['Kegiatan'])
     df_b = df_b[df_b['Kegiatan'].astype(str).str.strip() != ""]
-    
     return df_h, df_b.fillna("")
 
 try:
@@ -79,12 +68,7 @@ with st.sidebar:
 # --- 5. LOGIKA TAMPILAN ---
 if data_ok:
     if pilihan == "🏠 Dashboard Beranda":
-        st.markdown("""
-            <div class="hero-section">
-                <h1 style='margin:0; color:white;'>Halo, Bapak Mama & Saudara Semua! 👋</h1>
-                <p style='font-size:1.2rem; opacity:0.9;'>Pemerintah hadir untuk memastikan dapur kita tetap mengepul. Pantau harga pangan hari ini agar belanja lebih tenang.</p>
-            </div>
-        """, unsafe_allow_html=True)
+        st.markdown('<div class="hero-section"><h1>Halo, Bapak Mama & Saudara Semua! 👋</h1><p>Pemerintah hadir untuk memastikan dapur kita tetap mengepul. Pantau harga pangan hari ini agar belanja lebih tenang.</p></div>', unsafe_allow_html=True)
         search = st.text_input("🔍 Cari bahan makanan...", "")
         df_show = df_harga[df_harga['KOMODITAS'].str.contains(search, case=False)] if search else df_harga
         for _, row in df_show.iterrows():
@@ -105,19 +89,27 @@ if data_ok:
         for _, row in df_berita.iterrows():
             with st.container():
                 st.markdown(f'<div class="card-container"><h3>{row["Kegiatan"]}</h3>', unsafe_allow_html=True)
+                
                 tipe = str(row['Tipe']).lower()
+                # Pastikan link bersih dari spasi dan bukan angka 0
                 link = str(row['Link']).strip()
 
-                # KONVERSI OTOMATIS LINK DRIVE
-                if link and "drive.google.com" in link:
-                    f_id = link.split('/')[-2] if '/view' in link else link.split('=')[-1]
-                    link = f"https://drive.google.com/uc?export=view&id={f_id}"
+                # FILTER SAKTI: Hanya proses jika link diawali http dan bukan teks '0'
+                if link and link != "0" and link != "0.0" and link.startswith("http"):
+                    # Konversi otomatis Google Drive
+                    if "drive.google.com" in link:
+                        f_id = link.split('/')[-2] if '/view' in link else link.split('=')[-1]
+                        link = f"https://drive.google.com/uc?export=view&id={f_id}"
 
-                if link.startswith("http"):
-                    if "foto" in tipe: st.image(link, use_container_width=True)
-                    elif "video" in tipe: st.video(link)
+                    if "foto" in tipe:
+                        st.image(link, use_container_width=True)
+                    elif "video" in tipe:
+                        st.video(link)
+                else:
+                    # Jika link kosong/0, kita tidak menampilkan apa-apa (ikon pecah hilang)
+                    pass
                 
-                if str(row['Tanggal']) != "0":
+                if str(row['Tanggal']) != "0" and str(row['Tanggal']) != "nan":
                     st.caption(f"📅 Tanggal: {row['Tanggal']}")
                 st.markdown('</div>', unsafe_allow_html=True)
 
