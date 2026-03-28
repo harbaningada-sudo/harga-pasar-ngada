@@ -14,15 +14,20 @@ st.set_page_config(
 # --- 2. LOGIKA MEMORI PUBLIK (GLOBAL CACHE) ---
 @st.cache_resource
 def get_global_settings():
-    return {"pilihan_admin": []}
+    # Menyimpan pilihan tren dan konten teks agar bisa diedit admin
+    return {
+        "pilihan_admin": [],
+        "hero_title": "Smart Economy Ngada 👋",
+        "hero_subtitle": "Pelayanan transparan terhadap harga komoditas bagi masyarakat Ngada.",
+        "about_text": "Inovasi digital ini menjamin masyarakat mendapatkan akses informasi harga yang jujur dan akurat langsung dari sumbernya."
+    }
 
 global_settings = get_global_settings()
 
-# --- 3. DETEKSI JALUR RAHASIA (URL PARAMETER) ---
-# Hanya jika link mengandung ?status=set maka kotak password muncul
+# --- 3. DETEKSI PINTU RAHASIA ---
 jalur_rahasia = st.query_params.get("status") == "set"
 
-# --- 4. CSS KUSTOM (SMART ASN & RAMAH MASYARAKAT) ---
+# --- 4. CSS KUSTOM ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
@@ -84,19 +89,32 @@ with st.sidebar:
         "ℹ️ Komitmen Smart ASN"
     ])
     
-    # --- PANEL ADMIN TERSEMBUNYI TOTAL ---
+    # --- PANEL ADMIN SILUMAN ---
     is_admin = False
     if jalur_rahasia:
         st.divider()
         pass_input = st.text_input("🔑 Verifikasi Petugas", type="password")
         if pass_input == "ngada2026":
             is_admin = True
-            st.success("Akses Diterima")
+            st.success("Akses Admin Aktif!")
 
 # --- 7. LOGIKA TAMPILAN ---
 if not df_harga.empty:
     if pilihan == "🏠 Dashboard Beranda":
-        st.markdown('<div class="hero-section"><h1>Smart Economy Ngada 👋</h1><p>Pelayanan transparan terhadap harga komoditas bagi masyarakat Ngada.</p></div>', unsafe_allow_html=True)
+        # Menggunakan teks dari memori yang bisa diedit admin
+        st.markdown(f'<div class="hero-section"><h1>{global_settings["hero_title"]}</h1><p>{global_settings["hero_subtitle"]}</p></div>', unsafe_allow_html=True)
+        
+        # EDITOR TEKS UNTUK ADMIN
+        if is_admin:
+            with st.expander("📝 Edit Tulisan Dashboard"):
+                new_title = st.text_input("Ganti Judul Besar:", value=global_settings["hero_title"])
+                new_sub = st.text_area("Ganti Sub-judul:", value=global_settings["hero_subtitle"])
+                if st.button("Simpan Perubahan Dashboard"):
+                    global_settings["hero_title"] = new_title
+                    global_settings["hero_subtitle"] = new_sub
+                    st.success("Berhasil diperbarui!")
+                    st.rerun()
+
         col_foto, col_data = st.columns([1, 2])
         with col_foto:
             if os.path.exists("IMG_20251125_111048.jpg"): st.image("IMG_20251125_111048.jpg", use_container_width=True, caption="Dokumentasi Pasar")
@@ -120,19 +138,18 @@ if not df_harga.empty:
                 except: continue
 
     elif pilihan == "📈 Tren Harga Komoditas":
-        st.title("📈 Tren Harga Terkini")
+        st.title("📈 Tren Harga Terpilih")
         df_valid = df_harga.dropna(subset=['SATUAN'])
         list_komoditas = df_valid['KOMODITAS'].unique().tolist()
         
-        # JIKA ADMIN BERHASIL MASUK
         if is_admin:
             st.warning("⚙️ MODE PENGATURAN TREN")
-            pilihan_baru = st.multiselect("Tentukan komoditas yang tampil di publik:", options=list_komoditas, default=global_settings["pilihan_admin"])
-            if st.button("🚀 Publikasikan"):
+            pilihan_baru = st.multiselect("Pilih komoditas untuk publik:", options=list_komoditas, default=global_settings["pilihan_admin"])
+            if st.button("🚀 Publikasikan ke Semua Device"):
                 global_settings["pilihan_admin"] = pilihan_baru
+                st.success("Tren berhasil diperbarui!")
                 st.rerun()
         
-        # TAMPILAN PUBLIK
         pilihan_final = global_settings["pilihan_admin"]
         if pilihan_final:
             df_plot = df_valid[df_valid['KOMODITAS'].isin(pilihan_final)].melt(id_vars=['KOMODITAS'], value_vars=['HARGA KEMARIN', 'HARGA HARI INI'], var_name='Waktu', value_name='Harga (Rp)')
@@ -158,7 +175,16 @@ if not df_harga.empty:
 
     elif pilihan == "ℹ️ Komitmen Smart ASN":
         st.title("ℹ️ Komitmen Smart ASN")
-        st.markdown('<div class="card-container"><h3>Transparansi & Akuntabilitas</h3><p>Inovasi digital ini menjamin masyarakat mendapatkan akses informasi harga yang jujur dan akurat.</p></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="card-container"><h3>Transparansi & Akuntabilitas</h3><p>{global_settings["about_text"]}</p></div>', unsafe_allow_html=True)
+        
+        # EDITOR UNTUK ADMIN
+        if is_admin:
+            with st.expander("📝 Edit Penjelasan Tentang Kami"):
+                new_about = st.text_area("Ganti Isi Komitmen:", value=global_settings["about_text"])
+                if st.button("Simpan Perubahan Komitmen"):
+                    global_settings["about_text"] = new_about
+                    st.success("Teks komitmen berhasil diperbarui!")
+                    st.rerun()
 
 else:
     st.error("⚠️ Gagal memuat data.")
