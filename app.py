@@ -11,7 +11,7 @@ st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-    .stApp { background-color: #F0F4F8; }
+    .stApp { background-color: #F8FAFC; }
     
     /* Header & Hero Banner */
     header { background-color: #059669 !important; z-index: 99999 !important; } 
@@ -23,18 +23,16 @@ st.markdown("""
         margin-bottom: 30px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
     }
 
-    /* Card Harga Atraktif */
-    .card-harga {
+    /* Card Berita & Harga */
+    .card-container {
         background: white; padding: 20px; border-radius: 15px;
-        border-left: 8px solid #059669; margin-bottom: 15px;
+        border: 1px solid #E2E8F0; margin-bottom: 20px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        transition: 0.3s;
     }
-    .card-harga:hover { transform: scale(1.02); }
-    .harga-naik { color: #DC2626; font-weight: bold; }
-    .harga-turun { color: #059669; font-weight: bold; }
-    .harga-tetap { color: #64748B; font-weight: bold; }
-
+    .card-harga {
+        border-left: 8px solid #059669;
+    }
+    
     .block-container { padding-top: 5rem; }
     </style>
     """, unsafe_allow_html=True)
@@ -76,37 +74,26 @@ with st.sidebar:
 # --- KONTEN ---
 if data_tersedia:
     if pilihan == "🏠 Beranda":
-        # Hero Banner
-        st.markdown("""
-            <div class="hero-section">
-                <h1 style='margin:0; color:white;'>Halo, Masyarakat Ngada! 👋</h1>
-                <p style='font-size:1.2rem; opacity:0.9;'>Pantau harga pangan hari ini dengan lebih mudah dan transparan.</p>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        st.subheader("🛒 Update Harga Bahan Pokok")
-        
-        # Filter Pencarian Ringan
-        search = st.text_input("🔍 Cari bahan makanan (misal: Beras, Telur)...", "")
+        st.markdown('<div class="hero-section"><h1 style="margin:0; color:white;">Halo, Masyarakat Ngada! 👋</h1><p style="font-size:1.2rem; opacity:0.9;">Pantau harga pangan hari ini dengan lebih mudah.</p></div>', unsafe_allow_html=True)
+        search = st.text_input("🔍 Cari bahan makanan...", "")
         df_show = df_harga.copy()
-        if search:
-            df_show = df_show[df_show['KOMODITAS'].str.contains(search, case=False)]
+        if search: df_show = df_show[df_show['KOMODITAS'].str.contains(search, case=False)]
 
-        # Tampilan Kartu Harga
         for _, row in df_show.iterrows():
-            status_class = "harga-naik" if row['SELISIH (Rp)'] > 0 else ("harga-turun" if row['SELISIH (Rp)'] < 0 else "harga-tetap")
-            simbol = "🔺" if row['SELISIH (Rp)'] > 0 else ("🔹" if row['SELISIH (Rp)'] < 0 else "➖")
+            selisih = int(row['SELISIH (Rp)'])
+            warna = "#DC2626" if selisih > 0 else ("#059669" if selisih < 0 else "#64748B")
+            simbol = "🔺" if selisih > 0 else ("🔹" if selisih < 0 else "➖")
             
             st.markdown(f"""
-                <div class="card-harga">
+                <div class="card-container card-harga">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div>
-                            <span style="font-size: 1.2rem; font-weight: 800; color: #1E293B;">{row['KOMODITAS']}</span><br>
-                            <span style="color: #64748B; font-size: 0.9rem;">Satuan: {row['SATUAN']}</span>
+                            <span style="font-size: 1.1rem; font-weight: 700;">{row['KOMODITAS']}</span><br>
+                            <span style="color: #64748B; font-size: 0.8rem;">Satuan: {row['SATUAN']}</span>
                         </div>
                         <div style="text-align: right;">
-                            <span style="font-size: 1.5rem; font-weight: 800; color: #059669;">Rp {int(row['HARGA HARI INI']):,}/ {row['SATUAN']}</span><br>
-                            <span class="{status_class}">{simbol} Selisih: Rp {abs(int(row['SELISIH (Rp)'])):,}</span>
+                            <span style="font-size: 1.3rem; font-weight: 800; color: #059669;">Rp {int(row['HARGA HARI INI']):,}.00</span><br>
+                            <span style="color: {warna}; font-size: 0.9rem; font-weight: 600;">{simbol} Selisih: Rp {abs(selisih):,}</span>
                         </div>
                     </div>
                 </div>
@@ -122,16 +109,32 @@ if data_tersedia:
             st.plotly_chart(fig, use_container_width=True)
 
     elif pilihan == "📰 Berita & Pasar Murah":
-        st.title("📰 Informasi Terkini")
+        st.title("📰 Informasi Terkini & Media")
+        st.markdown("Berikut adalah dokumentasi kegiatan dan jadwal pasar murah.")
+        st.divider()
+
         for _, row in df_berita.iterrows():
             judul = row.get('Kegiatan', 'Informasi Ekonomi')
             tipe = str(row.get('Tindak Lanjut', '')).lower()
-            link = row.get('Unnamed: 3', '')
+            link = str(row.get('Unnamed: 3', ''))
             
-            with st.expander(f"📌 {judul}"):
-                if 'foto' in tipe: st.image(link)
-                elif 'video' in tipe: st.video(link)
-                else: st.write(link)
+            with st.container():
+                st.markdown(f"""<div class="card-container"><h3>{judul}</h3>""", unsafe_allow_html=True)
+                
+                # OTOMATISASI TAMPILAN MEDIA
+                if "http" in link:
+                    # Deteksi Video (YouTube atau MP4)
+                    if "youtube.com" in link or "youtu.be" in link:
+                        st.video(link)
+                    # Deteksi Foto (Ekstensi gambar umum)
+                    elif any(ext in link.lower() for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]):
+                        st.image(link, use_container_width=True)
+                    else:
+                        st.info(f"🔗 [Klik untuk melihat dokumen/link]({link})")
+                else:
+                    st.write(link)
+                
+                st.markdown(f"""<p style="color: gray; font-size: 0.8rem; margin-top:10px;">Status: {row.get('Keterangan', '-')}</p></div>""", unsafe_allow_html=True)
 
     elif pilihan == "📥 Unduh Data":
         st.title("📥 Pusat Data")
@@ -140,6 +143,5 @@ if data_tersedia:
     elif pilihan == "ℹ️ Tentang":
         st.title("ℹ️ Tentang Aplikasi")
         st.info("Portal ini adalah inovasi Bagian Perekonomian & SDA Kab. Ngada untuk digitalisasi pelayanan publik.")
-
 else:
     st.error(f"Koneksi terputus: {pesan_error}")
