@@ -11,28 +11,33 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# --- 2. LOGIKA KEAMANAN ADMIN (EMAIL-BASED) ---
-# MASUKKAN EMAIL GOOGLE ANDA DI SINI
-EMAIL_ADMIN_RESMI = "harbaningada-sudo@gmail.com" # Ganti dengan email Anda jika berbeda
+# --- 2. LOGIKA KEAMANAN ADMIN (DOUBLE SECURITY) ---
+# Mantra URL: ?role=admin
+# Email: harbaningada-sudo@gmail.com
+EMAIL_ADMIN = "harbaningada-sudo@gmail.com"
 
-def check_is_admin():
-    # Streamlit Cloud secara otomatis menangkap email user yang login
+def check_admin():
+    # Cek via URL mantra
+    if st.query_params.get("role") == "admin":
+        return True
+    # Cek via Email login
     try:
-        user_email = st.user.email
-        return user_email == EMAIL_ADMIN_RESMI
+        if st.user.email == EMAIL_ADMIN:
+            return True
     except:
-        return False
+        pass
+    return False
 
-is_admin_user = check_is_admin()
+is_admin = check_admin()
 
-# --- 3. LOGIKA MEMORI PUBLIK (GLOBAL CACHE) ---
+# --- 3. MEMORI PUBLIK (GLOBAL CACHE) ---
 @st.cache_resource
 def get_global_settings():
     return {"pilihan_admin": []}
 
 global_settings = get_global_settings()
 
-# --- 4. CSS KUSTOM (SMART ASN & RAMAH MASYARAKAT) ---
+# --- 4. CSS KUSTOM ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
@@ -72,7 +77,6 @@ def load_all_data():
                 current_cat = str(row['KOMODITAS']).upper()
             categories.append(current_cat)
         df_h['KATEGORI_INDUK'] = categories
-        
         url_b = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT2LMrwn5xk782uKyRGkeOzCXt3DDK-iBxe_F8RUkI7Zk4iYgMVcE_f0XbSc8R72Q/pub?gid=201409714&single=true&output=csv"
         df_b = pd.read_csv(url_b, skiprows=2)
         df_b.columns = ["No", "Kegiatan", "Tipe", "Link", "Tanggal"]
@@ -85,8 +89,7 @@ df_harga, df_berita = load_all_data()
 # --- 6. SIDEBAR ---
 with st.sidebar:
     st.markdown("<br>", unsafe_allow_html=True)
-    if os.path.exists("logo_ngada.png"): 
-        st.image("logo_ngada.png", use_container_width=True)
+    if os.path.exists("logo_ngada.png"): st.image("logo_ngada.png", use_container_width=True)
     st.divider()
     pilihan = st.radio("Menu Layanan Digital:", [
         "🏠 Dashboard Beranda", 
@@ -96,12 +99,12 @@ with st.sidebar:
         "ℹ️ Komitmen Smart ASN"
     ])
     
-    # KUNCI KEAMANAN: Menu Admin hanya muncul jika Email Login Cocok
-    mode_admin_aktif = False
-    if is_admin_user:
+    # PANEL ADMIN (Hanya Muncul Jika Syarat Terpenuhi)
+    mode_admin = False
+    if is_admin:
         st.divider()
-        st.markdown(f"### 🔐 Admin: {st.user.email}")
-        mode_admin_aktif = st.checkbox("Aktifkan Kunci Tren Publik")
+        st.markdown("### 🔐 Panel Kontrol Admin")
+        mode_admin = st.checkbox("Aktifkan Kunci Tren")
 
 # --- 7. LOGIKA TAMPILAN ---
 if not df_harga.empty:
@@ -109,8 +112,7 @@ if not df_harga.empty:
         st.markdown('<div class="hero-section"><h1>Smart Economy Ngada 👋</h1><p>Pelayanan transparan terhadap harga komoditas bagi masyarakat Ngada.</p></div>', unsafe_allow_html=True)
         col_foto, col_data = st.columns([1, 2])
         with col_foto:
-            if os.path.exists("IMG_20251125_111048.jpg"): 
-                st.image("IMG_20251125_111048.jpg", use_container_width=True, caption="Dokumentasi Pasar")
+            if os.path.exists("IMG_20251125_111048.jpg"): st.image("IMG_20251125_111048.jpg", use_container_width=True, caption="Dokumentasi Pasar")
         with col_data:
             search = st.text_input("🔍 Cari komoditas...", "")
             df_show = df_harga.copy()
@@ -132,20 +134,16 @@ if not df_harga.empty:
 
     elif pilihan == "📈 Tren Harga Komoditas":
         st.title("📈 Tren Harga Terkini")
-        st.markdown("Daftar komoditas pilihan yang dipantau intensif oleh Bagian Perekonomian & SDA.")
-        
         df_valid = df_harga.dropna(subset=['SATUAN'])
         list_komoditas = df_valid['KOMODITAS'].unique().tolist()
         
-        # HANYA ANDA (ADMIN) YANG BISA MELIHAT BAGIAN INI
-        if mode_admin_aktif:
-            st.warning(f"⚠️ LOGIN SEBAGAI: {st.user.email}. Pilihan Anda akan tampil di semua device.")
-            pilihan_baru = st.multiselect("Pilih komoditas untuk publik:", options=list_komoditas, default=global_settings["pilihan_admin"])
-            if st.button("🚀 Kunci & Publikasikan ke Publik"):
+        if mode_admin:
+            st.warning("⚠️ MODE ADMIN: Pilihan Anda tampil di semua device.")
+            pilihan_baru = st.multiselect("Pilih komoditas:", options=list_komoditas, default=global_settings["pilihan_admin"])
+            if st.button("🚀 Publikasikan ke Semua Device"):
                 global_settings["pilihan_admin"] = pilihan_baru
-                st.success("Tren berhasil diperbarui untuk semua pengguna!")
+                st.success("Tren berhasil diperbarui!")
         
-        # TAMPILAN OTOMATIS UNTUK MASYARAKAT
         pilihan_final = global_settings["pilihan_admin"]
         if pilihan_final:
             df_plot = df_valid[df_valid['KOMODITAS'].isin(pilihan_final)].melt(id_vars=['KOMODITAS'], value_vars=['HARGA KEMARIN', 'HARGA HARI INI'], var_name='Waktu', value_name='Harga (Rp)')
