@@ -11,33 +11,14 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# --- 2. LOGIKA KEAMANAN ADMIN (DOUBLE SECURITY) ---
-# Mantra URL: ?role=admin
-# Email: harbaningada-sudo@gmail.com
-EMAIL_ADMIN = "harbaningada-sudo@gmail.com"
-
-def check_admin():
-    # Cek via URL mantra
-    if st.query_params.get("role") == "admin":
-        return True
-    # Cek via Email login
-    try:
-        if st.user.email == EMAIL_ADMIN:
-            return True
-    except:
-        pass
-    return False
-
-is_admin = check_admin()
-
-# --- 3. MEMORI PUBLIK (GLOBAL CACHE) ---
+# --- 2. LOGIKA MEMORI PUBLIK (GLOBAL CACHE) ---
 @st.cache_resource
 def get_global_settings():
     return {"pilihan_admin": []}
 
 global_settings = get_global_settings()
 
-# --- 4. CSS KUSTOM ---
+# --- 3. CSS KUSTOM (SMART ASN & RAMAH MASYARAKAT) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
@@ -64,7 +45,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 5. FUNGSI MUAT DATA ---
+# --- 4. FUNGSI MUAT DATA ---
 @st.cache_data(ttl=60)
 def load_all_data():
     try:
@@ -86,7 +67,7 @@ def load_all_data():
 
 df_harga, df_berita = load_all_data()
 
-# --- 6. SIDEBAR ---
+# --- 5. SIDEBAR ---
 with st.sidebar:
     st.markdown("<br>", unsafe_allow_html=True)
     if os.path.exists("logo_ngada.png"): st.image("logo_ngada.png", use_container_width=True)
@@ -99,14 +80,13 @@ with st.sidebar:
         "ℹ️ Komitmen Smart ASN"
     ])
     
-    # PANEL ADMIN (Hanya Muncul Jika Syarat Terpenuhi)
-    mode_admin = False
-    if is_admin:
-        st.divider()
-        st.markdown("### 🔐 Panel Kontrol Admin")
-        mode_admin = st.checkbox("Aktifkan Kunci Tren")
+    # --- PANEL ADMIN DENGAN PASSWORD (Paling Aman) ---
+    st.divider()
+    # Gunakan password sederhana saja biar cepat
+    pass_input = st.text_input("🔑 Akses Admin", type="password")
+    is_admin = (pass_input == "ngada2026") # Password Anda: ngada2026
 
-# --- 7. LOGIKA TAMPILAN ---
+# --- 6. LOGIKA TAMPILAN ---
 if not df_harga.empty:
     if pilihan == "🏠 Dashboard Beranda":
         st.markdown('<div class="hero-section"><h1>Smart Economy Ngada 👋</h1><p>Pelayanan transparan terhadap harga komoditas bagi masyarakat Ngada.</p></div>', unsafe_allow_html=True)
@@ -134,16 +114,20 @@ if not df_harga.empty:
 
     elif pilihan == "📈 Tren Harga Komoditas":
         st.title("📈 Tren Harga Terkini")
+        st.markdown("Berikut adalah komoditas pilihan yang dipantau secara intensif.")
+        
         df_valid = df_harga.dropna(subset=['SATUAN'])
         list_komoditas = df_valid['KOMODITAS'].unique().tolist()
         
-        if mode_admin:
-            st.warning("⚠️ MODE ADMIN: Pilihan Anda tampil di semua device.")
-            pilihan_baru = st.multiselect("Pilih komoditas:", options=list_komoditas, default=global_settings["pilihan_admin"])
-            if st.button("🚀 Publikasikan ke Semua Device"):
+        # JIKA PASSWORD BENAR: TAMPILKAN SETTING ADMIN
+        if is_admin:
+            st.success("✅ Mode Admin Aktif")
+            pilihan_baru = st.multiselect("Pilih komoditas untuk Publik:", options=list_komoditas, default=global_settings["pilihan_admin"])
+            if st.button("🚀 Publikasikan Sekarang"):
                 global_settings["pilihan_admin"] = pilihan_baru
-                st.success("Tren berhasil diperbarui!")
+                st.rerun() # Refresh otomatis
         
+        # TAMPILAN UNTUK SEMUA ORANG
         pilihan_final = global_settings["pilihan_admin"]
         if pilihan_final:
             df_plot = df_valid[df_valid['KOMODITAS'].isin(pilihan_final)].melt(id_vars=['KOMODITAS'], value_vars=['HARGA KEMARIN', 'HARGA HARI INI'], var_name='Waktu', value_name='Harga (Rp)')
@@ -169,7 +153,7 @@ if not df_harga.empty:
 
     elif pilihan == "ℹ️ Komitmen Smart ASN":
         st.title("ℹ️ Komitmen Smart ASN")
-        st.markdown('<div class="card-container"><h3>Transparansi Berbasis Teknologi</h3><p>Inovasi digital ini menjamin masyarakat mendapatkan akses informasi harga yang jujur dan akurat langsung dari sumbernya.</p></div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-container"><h3>Transparansi & Akuntabilitas</h3><p>Inovasi digital ini menjamin masyarakat mendapatkan akses informasi harga yang jujur dan akurat langsung dari sumbernya.</p></div>', unsafe_allow_html=True)
 
 else:
     st.error("⚠️ Gagal memuat data.")
