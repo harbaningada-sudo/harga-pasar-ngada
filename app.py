@@ -39,6 +39,8 @@ def load_data_harga():
     df['HARGA KEMARIN'] = pd.to_numeric(df['HARGA KEMARIN'], errors='coerce').fillna(0)
     df['HARGA HARI INI'] = pd.to_numeric(df['HARGA HARI INI'], errors='coerce').fillna(0)
     df['SELISIH (Rp)'] = pd.to_numeric(df['SELISIH (Rp)'], errors='coerce').fillna(0)
+    # Perbaikan typo dari spreadsheet jika ada
+    df['KOMODITAS'] = df['KOMODITAS'].replace('eras Medium', 'Beras Medium')
     return df
 
 @st.cache_data(ttl=600)
@@ -83,10 +85,55 @@ if data_tersedia:
         st.dataframe(df_harga, use_container_width=True, hide_index=True)
 
     elif pilihan == "📈 Analisis Harga":
-        st.title("📈 Komparasi Harga")
+        st.title("📈 Komparasi & Analisis Tren Harga")
+        st.markdown("Pilih komoditas untuk membandingkan harga kemarin dan hari ini.")
         st.divider()
-        fig = px.bar(df_harga.head(10), x='KOMODITAS', y='HARGA HARI INI', color_discrete_sequence=['#059669'])
-        st.plotly_chart(fig, use_container_width=True)
+
+        # Fitur Pilih Komoditas (Multiselect)
+        list_komoditas = df_harga['KOMODITAS'].unique().tolist()
+        pilihan_komoditas = st.multiselect(
+            "Pilih Komoditas yang ingin ditampilkan:",
+            options=list_komoditas,
+            default=list_komoditas[:5] # Default munculkan 5 pertama
+        )
+
+        if pilihan_komoditas:
+            # Filter data berdasarkan pilihan
+            df_filtered = df_harga[df_harga['KOMODITAS'].isin(pilihan_komoditas)]
+
+            # Transformasi data agar bisa dibuat perbandingan (Yesterday vs Today)
+            df_plot = df_filtered.melt(
+                id_vars=['KOMODITAS'], 
+                value_vars=['HARGA KEMARIN', 'HARGA HARI INI'],
+                var_name='Periode', 
+                value_name='Harga (Rp)'
+            )
+
+            # Buat Grafik Bar Berdampingan
+            fig = px.bar(
+                df_plot, 
+                x='KOMODITAS', 
+                y='Harga (Rp)', 
+                color='Periode',
+                barmode='group',
+                text_auto='.2s',
+                color_discrete_map={
+                    'HARGA KEMARIN': '#94A3B8', # Abu-abu
+                    'HARGA HARI INI': '#059669'  # Hijau
+                },
+                template='plotly_white'
+            )
+
+            fig.update_layout(
+                xaxis_title="Nama Komoditas",
+                yaxis_title="Nominal Harga (Rupiah)",
+                legend_title="Keterangan Waktu",
+                margin=dict(l=20, r=20, t=30, b=20)
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("Silakan pilih minimal satu komoditas pada kotak di atas.")
 
     elif pilihan == "📋 Laporan Kinerja":
         st.title("📋 Dokumentasi Tindak Lanjut")
@@ -100,7 +147,6 @@ if data_tersedia:
 
     elif pilihan == "📥 Pusat Unduhan":
         st.title("📥 Pusat Unduhan")
-        st.markdown("Silakan unduh data laporan dalam format CSV di bawah ini:")
         st.divider()
         col1, col2 = st.columns(2)
         with col1:
