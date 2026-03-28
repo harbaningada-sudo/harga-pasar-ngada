@@ -19,6 +19,7 @@ st.markdown("""
         padding: 40px; border-radius: 20px; color: white !important;
         margin-bottom: 25px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
     }
+    .hero-section h1, .hero-section p { color: white !important; }
 
     .group-header {
         background: #E2E8F0; padding: 12px 20px; border-radius: 10px;
@@ -74,18 +75,24 @@ with st.sidebar:
     if os.path.exists("logo_ngada.png"): 
         st.image("logo_ngada.png", use_container_width=True)
     st.divider()
-    pilihan = st.radio("Menu Layanan:", [
+    pilihan = st.radio("Layanan Digital Ekonomi:", [
         "🏠 Dashboard Beranda", 
-        "📈 Tren Harga", 
+        "📈 Tren Harga Komoditas", 
         "📰 Berita Digital", 
-        "📥 Unduh Data", 
-        "ℹ️ Komitmen ASN"
+        "📥 Pusat Unduhan", 
+        "ℹ️ Komitmen Smart ASN"
     ])
 
 # --- 5. LOGIKA TAMPILAN ---
 if not df_harga.empty:
+    # --- MENU 1: BERANDA (ORIENTASI PELAYANAN) ---
     if pilihan == "🏠 Dashboard Beranda":
-        st.markdown('<div class="hero-section"><h1>Smart Economy Ngada 👋</h1><p>Pantau harga pasar hari ini. Transparan, Akurat, dan Akuntabel.</p></div>', unsafe_allow_html=True)
+        st.markdown("""
+            <div class="hero-section">
+                <h1>Smart Economy Ngada 👋</h1>
+                <p>Implementasi <b>Orientasi Pelayanan</b> melalui penyediaan data harga pasar yang transparan, akurat, dan dapat dipertanggungjawabkan demi membantu Bapak Mama dalam memenuhi kebutuhan pokok keluarga.</p>
+            </div>
+        """, unsafe_allow_html=True)
         
         search = st.text_input("🔍 Cari komoditas atau kelompok (Contoh: Ayam, Telur, Beras)...", "")
         
@@ -104,16 +111,14 @@ if not df_harga.empty:
                 st.markdown(f'<div class="group-header">📂 KELOMPOK: {row["KATEGORI_INDUK"]}</div>', unsafe_allow_html=True)
                 last_header = row['KATEGORI_INDUK']
 
-            # JANGAN PROSES BARIS JUDUL (Satuan Kosong) SEBAGAI KARTU HARGA
+            # JANGAN PROSES BARIS JUDUL SEBAGAI KARTU HARGA
             if pd.isna(row['SATUAN']) or str(row['SATUAN']).strip() == "":
                 continue
 
-            # TAMPILKAN KARTU HARGA (Hanya untuk baris yang punya satuan)
+            # TAMPILKAN KARTU HARGA
             try:
-                # Perbaikan Error: pd.to_numeric menangani teks yang masuk ke kolom angka
                 h_ini_raw = pd.to_numeric(row['HARGA HARI INI'], errors='coerce')
                 h_kmrn_raw = pd.to_numeric(row['HARGA KEMARIN'], errors='coerce')
-                
                 h_ini = int(h_ini_raw) if not pd.isna(h_ini_raw) else 0
                 h_kmrn = int(h_kmrn_raw) if not pd.isna(h_kmrn_raw) else 0
                 selisih = h_ini - h_kmrn
@@ -137,27 +142,45 @@ if not df_harga.empty:
             except:
                 continue
 
-    elif pilihan == "📈 Tren Harga":
-        st.title("📈 Analisis Tren Harga")
-        # Hanya ambil data yang punya satuan (bukan judul kategori)
+    # --- MENU 2: TREN HARGA ---
+    elif pilihan == "📈 Tren Harga Komoditas":
+        st.title("📈 Analisis Tren Harga Digital")
         df_chart = df_harga.dropna(subset=['SATUAN'])
         fig = px.bar(df_chart, x="KOMODITAS", y="HARGA HARI INI", color_discrete_sequence=['#059669'])
         st.plotly_chart(fig, use_container_width=True)
     
+    # --- MENU 3: BERITA ---
     elif pilihan == "📰 Berita Digital":
-        st.title("📰 Informasi & Berita")
+        st.title("📰 Dokumentasi & Publikasi")
         for _, row in df_berita.iloc[::-1].iterrows():
             st.markdown(f'<div class="card-container"><h3>{row["Kegiatan"]}</h3><p>📅 {row["Tanggal"]}</p></div>', unsafe_allow_html=True)
             if str(row['Link']).startswith("http"):
-                st.markdown(f'<a href="{row["Link"]}" target="_blank" style="text-decoration:none; color:#4F46E5; font-weight:bold;">📂 Lihat Dokumentasi</a>', unsafe_allow_html=True)
-                
-    elif pilihan == "📥 Unduh Data":
-        st.title("📥 Pusat Unduhan")
+                st.markdown(f'<a href="{row["Link"]}" target="_blank" style="text-decoration:none; color:#4F46E5; font-weight:bold;">📂 Lihat Dokumentasi Lengkap</a>', unsafe_allow_html=True)
+
+    # --- MENU 4: UNDUH DATA ---
+    elif pilihan == "📥 Pusat Unduhan":
+        st.title("📥 Akses Data Terbuka (Open Data)")
         st.download_button("Simpan Data (CSV)", df_harga.to_csv(index=False).encode('utf-8'), "Harga_Ngada.csv", "text/csv")
 
-    elif pilihan == "ℹ️ Komitmen ASN":
-        st.title("ℹ️ Tentang Smart ASN")
-        st.info("Inovasi ini adalah bagian dari Proyek Aktualisasi CPNS Kabupaten Ngada Tahun 2026.")
+    # --- MENU 5: KOMITMEN SMART ASN ---
+    elif pilihan == "ℹ️ Komitmen Smart ASN":
+        st.title("ℹ️ Menuju Birokrasi Digital")
+        st.markdown("""
+            <div class="card-container">
+                <h3 style="color: #059669;">Integritas & Adaptif</h3>
+                <p style="font-size: 1.1rem; line-height: 1.7;">
+                    Sebagai bagian dari <b>Bagian Perekonomian & SDA Kabupaten Ngada</b>, kami berkomitmen menjadi <b>Smart ASN</b> yang senantiasa meningkatkan penguasaan teknologi (IT Mastery) untuk mewujudkan transparansi data.
+                </p>
+                <p style="font-size: 1.1rem; line-height: 1.7;">
+                    Aplikasi Dashboard Ekonomi ini merupakan wujud nyata penerapan nilai <b>BerAKHLAK</b>, khususnya dalam memberikan pelayanan publik yang prima dan berkualitas bagi kesejahteraan Bapak Mama masyarakat Ngada.
+                </p>
+                <hr>
+                <p style="font-size: 0.85rem; color: #94A3B8;">
+                    <b>Visi Smart ASN:</b> Integritas | Nasionalisme | Profesionalisme | Berwawasan Global | IT Mastery | Hospitality | Networking | Entrepreneurship<br><br>
+                    <i>Dikembangkan sebagai Proyek Aktualisasi Latsar CPNS Kabupaten Ngada Tahun 2026.</i>
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
 
 else:
-    st.error("⚠️ Gagal memuat data. Mohon cek format Spreadsheet Anda.")
+    st.error("⚠️ Gagal memuat data. Mohon periksa format Spreadsheet atau koneksi internet Anda.")
