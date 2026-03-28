@@ -14,7 +14,6 @@ st.set_page_config(
 # --- 2. LOGIKA MEMORI PUBLIK (GLOBAL CACHE) ---
 @st.cache_resource
 def get_global_settings():
-    # Menyimpan pilihan tren dan konten teks agar bisa diedit admin
     return {
         "pilihan_admin": [],
         "hero_title": "Smart Economy Ngada 👋",
@@ -27,30 +26,48 @@ global_settings = get_global_settings()
 # --- 3. DETEKSI PINTU RAHASIA ---
 jalur_rahasia = st.query_params.get("status") == "set"
 
-# --- 4. CSS KUSTOM ---
+# --- 4. CSS KUSTOM (FIX TEKS HITAM PEKAT UNTUK SEMUA DEVICE) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
-    html, body, [class*="css"] { font-family: 'Inter', sans-serif; color: #1E293B !important; }
-    .stApp { background-color: #F8FAFC; }
+    
+    /* Paksa semua teks dasar menjadi Hitam Pekat */
+    html, body, [class*="css"], .stMarkdown, p, span, div, label { 
+        font-family: 'Inter', sans-serif; 
+        color: #000000 !important; 
+    }
+    
+    .stApp { background-color: #FFFFFF !important; }
     header { background-color: #059669 !important; z-index: 99999 !important; } 
+    
+    /* Hero Section tetap Putih teksnya agar kontras dengan Background Hijau */
     .hero-section {
         background: linear-gradient(135deg, #059669 0%, #10B981 100%);
-        padding: 40px; border-radius: 20px; color: white !important;
+        padding: 40px; border-radius: 20px; 
         margin-bottom: 25px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
     }
+    .hero-section h1, .hero-section p { 
+        color: #FFFFFF !important; 
+    }
+
     .group-header {
-        background: #F1F5F9; padding: 12px 20px; border-radius: 10px;
+        background: #F1F5F9 !important; padding: 12px 20px; border-radius: 10px;
         margin-top: 25px; margin-bottom: 15px; font-weight: 800;
-        color: #0F172A; border-left: 10px solid #059669;
+        color: #000000 !important; border-left: 10px solid #059669;
         text-transform: uppercase; letter-spacing: 1px;
     }
+
     .card-container {
         background: white !important; padding: 25px; border-radius: 15px;
         border: 1px solid #E2E8F0; margin-bottom: 15px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     }
-    .price-main { font-size: 1.5rem; font-weight: 800; color: #1E293B !important; }
+    
+    /* Pastikan angka harga dan nama barang hitam pekat */
+    .price-main { font-size: 1.5rem; font-weight: 800; color: #000000 !important; }
+    .card-container b, .card-container small { color: #000000 !important; }
+    
+    .block-container { padding-top: 5rem !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -89,7 +106,6 @@ with st.sidebar:
         "ℹ️ Komitmen Smart ASN"
     ])
     
-    # --- PANEL ADMIN SILUMAN ---
     is_admin = False
     if jalur_rahasia:
         st.divider()
@@ -101,10 +117,8 @@ with st.sidebar:
 # --- 7. LOGIKA TAMPILAN ---
 if not df_harga.empty:
     if pilihan == "🏠 Dashboard Beranda":
-        # Menggunakan teks dari memori yang bisa diedit admin
         st.markdown(f'<div class="hero-section"><h1>{global_settings["hero_title"]}</h1><p>{global_settings["hero_subtitle"]}</p></div>', unsafe_allow_html=True)
         
-        # EDITOR TEKS UNTUK ADMIN
         if is_admin:
             with st.expander("📝 Edit Tulisan Dashboard"):
                 new_title = st.text_input("Ganti Judul Besar:", value=global_settings["hero_title"])
@@ -134,14 +148,13 @@ if not df_harga.empty:
                     selisih = h_ini - h_kmrn
                     warna = "#DC2626" if selisih > 0 else "#059669" if selisih < 0 else "#94A3B8"
                     ikon = "🔺" if selisih > 0 else "🔻" if selisih < 0 else "➖"
-                    st.markdown(f'<div class="card-container" style="border-left: 10px solid {warna};"><div style="display: flex; justify-content: space-between; align-items: center;"><div><b>{row["KOMODITAS"]}</b><br><small>Satuan: {row["SATUAN"]}</small></div><div style="text-align: right;"><span class="price-main">Rp {h_ini:,}</span><br><span style="color: {warna}; font-weight: 700;">{ikon} Rp {abs(selisih):,}</span><br><small style="color: gray;">Kemarin: Rp {h_kmrn:,}</small></div></div></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="card-container" style="border-left: 10px solid {warna};"><div style="display: flex; justify-content: space-between; align-items: center;"><div><b>{row["KOMODITAS"]}</b><br><small>Satuan: {row["SATUAN"]}</small></div><div style="text-align: right;"><span class="price-main">Rp {h_ini:,}</span><br><span style="color: {warna}; font-weight: 700;">{ikon} Rp {abs(selisih):,}</span><br><small style="color: #000000;">Kemarin: Rp {h_kmrn:,}</small></div></div></div>', unsafe_allow_html=True)
                 except: continue
 
     elif pilihan == "📈 Tren Harga Komoditas":
         st.title("📈 Tren Harga Terpilih")
         df_valid = df_harga.dropna(subset=['SATUAN'])
         list_komoditas = df_valid['KOMODITAS'].unique().tolist()
-        
         if is_admin:
             st.warning("⚙️ MODE PENGATURAN TREN")
             pilihan_baru = st.multiselect("Pilih komoditas untuk publik:", options=list_komoditas, default=global_settings["pilihan_admin"])
@@ -149,14 +162,13 @@ if not df_harga.empty:
                 global_settings["pilihan_admin"] = pilihan_baru
                 st.success("Tren berhasil diperbarui!")
                 st.rerun()
-        
         pilihan_final = global_settings["pilihan_admin"]
         if pilihan_final:
             df_plot = df_valid[df_valid['KOMODITAS'].isin(pilihan_final)].melt(id_vars=['KOMODITAS'], value_vars=['HARGA KEMARIN', 'HARGA HARI INI'], var_name='Waktu', value_name='Harga (Rp)')
             fig = px.bar(df_plot, x="KOMODITAS", y="Harga (Rp)", color="Waktu", barmode="group", text_auto='.2s', color_discrete_map={'HARGA KEMARIN': '#94A3B8', 'HARGA HARI INI': '#059669'})
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("💡 Pantau tren harga komoditas pilihan tim ekonomi di sini.")
+            st.info("💡 Belum ada data tren yang dipublikasikan oleh Admin.")
 
     elif pilihan == "📰 Media & Berita":
         st.title("📰 Media & Berita")
@@ -176,8 +188,6 @@ if not df_harga.empty:
     elif pilihan == "ℹ️ Komitmen Smart ASN":
         st.title("ℹ️ Komitmen Smart ASN")
         st.markdown(f'<div class="card-container"><h3>Transparansi & Akuntabilitas</h3><p>{global_settings["about_text"]}</p></div>', unsafe_allow_html=True)
-        
-        # EDITOR UNTUK ADMIN
         if is_admin:
             with st.expander("📝 Edit Penjelasan Tentang Kami"):
                 new_about = st.text_area("Ganti Isi Komitmen:", value=global_settings["about_text"])
@@ -185,6 +195,5 @@ if not df_harga.empty:
                     global_settings["about_text"] = new_about
                     st.success("Teks komitmen berhasil diperbarui!")
                     st.rerun()
-
 else:
     st.error("⚠️ Gagal memuat data.")
