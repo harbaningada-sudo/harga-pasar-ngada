@@ -3,42 +3,48 @@ import pandas as pd
 import plotly.express as px
 import os
 
-# --- 1. KONFIGURASI HALAMAN ---
-st.set_config(
+# --- 1. KONFIGURASI HALAMAN (SUDAH DIPERBAIKI) ---
+st.set_page_config(
     page_title="Portal Ekonomi Digital Ngada", 
     page_icon="🏛️", 
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="auto"
 )
 
 # --- 2. INISIALISASI MEMORI PILIHAN (SESSION STATE) ---
-# Agar pilihan komoditas tidak hilang saat pindah menu
 if 'pilihan_grafik' not in st.session_state:
     st.session_state['pilihan_grafik'] = []
 
-# --- 3. CSS KUSTOM (UI RAMAH & PROFESIONAL) ---
+# --- 3. CSS KUSTOM (SMART ASN & UI BERSIH) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; color: #1E293B !important; }
     .stApp { background-color: #F8FAFC; }
-    header { background-color: #059669 !important; } 
+    header { background-color: #059669 !important; z-index: 99999 !important; } 
+    [data-testid="collapsedControl"] { color: #FFFFFF !important; }
     
     .hero-section {
         background: linear-gradient(135deg, #059669 0%, #10B981 100%);
         padding: 40px; border-radius: 20px; color: white !important;
-        margin-bottom: 25px;
+        margin-bottom: 25px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
     }
+
     .group-header {
         background: #F1F5F9; padding: 12px 20px; border-radius: 10px;
         margin-top: 25px; margin-bottom: 15px; font-weight: 800;
-        border-left: 10px solid #059669;
+        color: #0F172A; border-left: 10px solid #059669;
+        text-transform: uppercase; letter-spacing: 1px;
     }
+
     .card-container {
         background: white !important; padding: 20px; border-radius: 15px;
         border: 1px solid #E2E8F0; margin-bottom: 15px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     }
-    .price-main { font-size: 1.4rem; font-weight: 800; }
+    
+    .price-main { font-size: 1.4rem; font-weight: 800; color: #1E293B !important; }
+    .block-container { padding-top: 5rem !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -49,7 +55,6 @@ def load_all_data():
         url_h = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR54g3RrvlqqZ3ppTrKiKK-L1fVT8YSvnXfihtO-H795s0KQ6H_TewZLFFAXPi-ktMizomg3JHdIIjI/pub?gid=929993273&single=true&output=csv"
         df_h = pd.read_csv(url_h)
         
-        # Logika Kategori Otomatis
         current_cat = "LAIN-LAIN"
         categories = []
         for i, row in df_h.iterrows():
@@ -73,7 +78,7 @@ with st.sidebar:
     if os.path.exists("logo_ngada.png"): 
         st.image("logo_ngada.png", use_container_width=True)
     st.divider()
-    pilihan = st.radio("Menu Layanan Digital:", [
+    pilihan = st.radio("Layanan Ekonomi Digital:", [
         "🏠 Dashboard Beranda", 
         "📈 Tren Harga Komoditas", 
         "📰 Media & Berita", 
@@ -88,14 +93,16 @@ if not df_harga.empty:
         st.markdown("""
             <div class="hero-section">
                 <h1>Smart Economy Ngada 👋</h1>
-                <p>Membantu Bapak Mama memantau harga pasar secara transparan dan akuntabel setiap hari.</p>
+                <p>Implementasi <b>Orientasi Pelayanan</b> melalui transparansi harga pasar. Kami hadir memberikan kepastian data yang akurat bagi Bapak Mama masyarakat Ngada.</p>
             </div>
         """, unsafe_allow_html=True)
         
         col_foto, col_data = st.columns([1, 2])
         with col_foto:
-            if os.path.exists("IMG_20251125_111048.jpg"):
-                st.image("IMG_20251125_111048.jpg", use_container_width=True, caption="Dokumentasi Pasar")
+            img_path = "IMG_20251125_111048.jpg"
+            if os.path.exists(img_path):
+                st.image(img_path, use_container_width=True, caption="Dokumentasi Pasar")
+            st.info("**Indikator:** 🔴 Naik | 🟢 Turun | ⚪ Stabil")
         
         with col_data:
             search = st.text_input("🔍 Cari komoditas...", "")
@@ -131,69 +138,54 @@ if not df_harga.empty:
 
     elif pilihan == "📈 Tren Harga Komoditas":
         st.title("📈 Analisis Perbandingan Harga")
-        st.markdown("Silakan pilih komoditas yang ingin Bapak Mama bandingkan harganya.")
+        st.markdown("Pilih komoditas untuk memantau perubahan harga secara visual.")
         
-        # Filter data agar hanya mengambil baris yang punya satuan (barang asli)
         df_valid = df_harga.dropna(subset=['SATUAN'])
-        list_pilihan = df_valid['KOMODITAS'].unique().tolist()
+        list_komoditas = df_valid['KOMODITAS'].unique().tolist()
         
-        # Perbaikan Error: Cek apakah pilihan di memori masih ada di daftar terbaru
-        defaults = [x for x in st.session_state['pilihan_grafik'] if x in list_pilihan]
+        # Validasi pilihan lama agar tidak error jika data berubah
+        defaults = [x for x in st.session_state['pilihan_grafik'] if x in list_komoditas]
         
-        # Input Pilihan User
-        pilihan_user = st.multiselect(
-            "Pilih komoditas (Bisa pilih lebih dari satu):", 
-            options=list_pilihan, 
-            default=defaults
-        )
-        
-        # Simpan ke memori
+        pilihan_user = st.multiselect("Pilih komoditas:", options=list_komoditas, default=defaults)
         st.session_state['pilihan_grafik'] = pilihan_user
         
         if pilihan_user:
-            # Siapkan data untuk grafik (Bandingkan Kemarin vs Hari Ini)
             df_plot = df_valid[df_valid['KOMODITAS'].isin(pilihan_user)].melt(
-                id_vars=['KOMODITAS'], 
-                value_vars=['HARGA KEMARIN', 'HARGA HARI INI'], 
-                var_name='Waktu', 
-                value_name='Harga (Rp)'
+                id_vars=['KOMODITAS'], value_vars=['HARGA KEMARIN', 'HARGA HARI INI'], 
+                var_name='Waktu', value_name='Harga (Rp)'
             )
-            
-            fig = px.bar(
-                df_plot, 
-                x="KOMODITAS", 
-                y="Harga (Rp)", 
-                color="Waktu", 
-                barmode="group",
-                text_auto='.2s',
-                color_discrete_map={'HARGA KEMARIN': '#94A3B8', 'HARGA HARI INI': '#059669'}
-            )
+            fig = px.bar(df_plot, x="KOMODITAS", y="Harga (Rp)", color="Waktu", barmode="group",
+                         text_auto='.2s', color_discrete_map={'HARGA KEMARIN': '#94A3B8', 'HARGA HARI INI': '#059669'})
             st.plotly_chart(fig, use_container_width=True)
-            st.success(f"Menampilkan tren untuk {len(pilihan_user)} komoditas terpilih.")
         else:
-            st.info("💡 Tips: Klik kolom di atas dan pilih beberapa barang (misal: Beras dan Telur) untuk melihat perbandingan harganya secara visual.")
+            st.info("💡 Silakan pilih komoditas di atas untuk memunculkan grafik.")
 
     elif pilihan == "📰 Media & Berita":
-        st.title("📰 Dokumentasi Pelayanan")
+        st.title("📰 Media & Berita")
         for _, row in df_berita.iloc[::-1].iterrows():
             st.markdown(f'<div class="card-container"><h3>{row["Kegiatan"]}</h3><p>📅 {row["Tanggal"]}</p></div>', unsafe_allow_html=True)
-            if str(row['Link']).startswith("http"):
-                st.markdown(f'<a href="{row["Link"]}" target="_blank" style="text-decoration:none; color:#4F46E5; font-weight:bold;">📂 Lihat Dokumentasi</a>', unsafe_allow_html=True)
+            link = str(row['Link'])
+            if link.startswith("http"):
+                if any(ext in link.lower() for ext in ['.jpg', '.png', '.jpeg']):
+                    st.image(link, use_container_width=True)
+                st.markdown(f'<a href="{link}" target="_blank" style="text-decoration:none; color:#4F46E5; font-weight:bold;">📂 Lihat Detail</a>', unsafe_allow_html=True)
 
     elif pilihan == "📥 Pusat Unduhan":
-        st.title("📥 Transparansi Data")
-        st.download_button("Unduh Data Harga (CSV)", df_harga.to_csv(index=False).encode('utf-8'), "Harga_Ngada.csv", "text/csv")
+        st.title("📥 Open Data Center")
+        col1, col2 = st.columns(2)
+        with col1: st.download_button("Unduh CSV Harga", df_harga.to_csv(index=False).encode('utf-8'), "Harga_Ngada.csv", "text/csv", use_container_width=True)
+        with col2: st.download_button("Unduh CSV Berita", df_berita.to_csv(index=False).encode('utf-8'), "Media_Ngada.csv", "text/csv", use_container_width=True)
 
     elif pilihan == "ℹ️ Komitmen Smart ASN":
-        st.title("ℹ️ Melayani dengan Transparan")
+        st.title("ℹ️ Komitmen Pelayanan Digital")
         st.markdown("""
             <div class="card-container">
-                <h3 style="color: #059669;">Dedikasi Untuk Masyarakat Ngada</h3>
+                <h3 style="color: #059669;">Melayani dengan Integritas</h3>
                 <p>Sebagai <b>Smart ASN</b>, kami menjunjung tinggi transparansi. Aplikasi ini memastikan setiap kenaikan atau penurunan harga komoditas tersampaikan secara jujur kepada Bapak Mama.</p>
                 <hr>
-                <small>Proyek Aktualisasi Latsar CPNS Ngada 2026</small>
+                <p style="font-size: 0.85rem; color: #94A3B8;">Proyek Aktualisasi Latsar CPNS Kabupaten Ngada Tahun 2026</p>
             </div>
         """, unsafe_allow_html=True)
 
 else:
-    st.error("⚠️ Data tidak tersedia.")
+    st.error("⚠️ Gagal memuat data. Mohon periksa koneksi internet atau format Spreadsheet Anda.")
