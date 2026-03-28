@@ -48,10 +48,11 @@ st.markdown("""
 @st.cache_data(ttl=60)
 def load_all_data():
     try:
+        # Data Harga
         url_h = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR54g3RrvlqqZ3ppTrKiKK-L1fVT8YSvnXfihtO-H795s0KQ6H_TewZLFFAXPi-ktMizomg3JHdIIjI/pub?gid=929993273&single=true&output=csv"
         df_h = pd.read_csv(url_h)
         
-        # Penentuan Kategori Otomatis berdasarkan Satuan Kosong
+        # Logika Kategori Otomatis
         current_cat = "LAIN-LAIN"
         categories = []
         for i, row in df_h.iterrows():
@@ -60,6 +61,7 @@ def load_all_data():
             categories.append(current_cat)
         df_h['KATEGORI_INDUK'] = categories
 
+        # Data Berita
         url_b = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT2LMrwn5xk782uKyRGkeOzCXt3DDK-iBxe_F8RUkI7Zk4iYgMVcE_f0XbSc8R72Q/pub?gid=201409714&single=true&output=csv"
         df_b = pd.read_csv(url_b, skiprows=2)
         df_b.columns = ["No", "Kegiatan", "Tipe", "Link", "Tanggal"]
@@ -75,28 +77,27 @@ with st.sidebar:
     if os.path.exists("logo_ngada.png"): 
         st.image("logo_ngada.png", use_container_width=True)
     st.divider()
-    pilihan = st.radio("Layanan Digital Ekonomi:", [
+    pilihan = st.radio("Layanan Ekonomi Digital:", [
         "🏠 Dashboard Beranda", 
         "📈 Tren Harga Komoditas", 
-        "📰 Berita Digital", 
+        "📰 Media & Berita", 
         "📥 Pusat Unduhan", 
         "ℹ️ Komitmen Smart ASN"
     ])
 
 # --- 5. LOGIKA TAMPILAN ---
 if not df_harga.empty:
-    # --- MENU 1: BERANDA (ORIENTASI PELAYANAN) ---
+    # --- MENU 1: BERANDA ---
     if pilihan == "🏠 Dashboard Beranda":
         st.markdown("""
             <div class="hero-section">
                 <h1>Smart Economy Ngada 👋</h1>
-                <p>Implementasi <b>Orientasi Pelayanan</b> melalui penyediaan data harga pasar yang transparan, akurat, dan dapat dipertanggungjawabkan demi membantu Bapak Mama dalam memenuhi kebutuhan pokok keluarga.</p>
+                <p>Implementasi <b>Orientasi Pelayanan</b> melalui penyediaan data harga pasar yang transparan dan akuntabel demi membantu masyarakat Ngada.</p>
             </div>
         """, unsafe_allow_html=True)
         
         search = st.text_input("🔍 Cari komoditas atau kelompok (Contoh: Ayam, Telur, Beras)...", "")
         
-        # Filter Data
         if search:
             mask = (df_harga['KOMODITAS'].str.contains(search, case=False, na=False)) | \
                    (df_harga['KATEGORI_INDUK'].str.contains(search, case=False, na=False))
@@ -106,21 +107,16 @@ if not df_harga.empty:
 
         last_header = ""
         for _, row in df_show.iterrows():
-            # Tampilkan Header Kelompok
             if row['KATEGORI_INDUK'] != last_header:
                 st.markdown(f'<div class="group-header">📂 KELOMPOK: {row["KATEGORI_INDUK"]}</div>', unsafe_allow_html=True)
                 last_header = row['KATEGORI_INDUK']
 
-            # JANGAN PROSES BARIS JUDUL SEBAGAI KARTU HARGA
             if pd.isna(row['SATUAN']) or str(row['SATUAN']).strip() == "":
                 continue
 
-            # TAMPILKAN KARTU HARGA
             try:
-                h_ini_raw = pd.to_numeric(row['HARGA HARI INI'], errors='coerce')
-                h_kmrn_raw = pd.to_numeric(row['HARGA KEMARIN'], errors='coerce')
-                h_ini = int(h_ini_raw) if not pd.isna(h_ini_raw) else 0
-                h_kmrn = int(h_kmrn_raw) if not pd.isna(h_kmrn_raw) else 0
+                h_ini = int(pd.to_numeric(row['HARGA HARI INI'], errors='coerce') or 0)
+                h_kmrn = int(pd.to_numeric(row['HARGA KEMARIN'], errors='coerce') or 0)
                 selisih = h_ini - h_kmrn
                 
                 if selisih > 0: css, ikon, warna, ket = "border-naik", "🔺", "#DC2626", f"Naik Rp {abs(selisih):,}"
@@ -149,34 +145,43 @@ if not df_harga.empty:
         fig = px.bar(df_chart, x="KOMODITAS", y="HARGA HARI INI", color_discrete_sequence=['#059669'])
         st.plotly_chart(fig, use_container_width=True)
     
-    # --- MENU 3: BERITA ---
-    elif pilihan == "📰 Berita Digital":
-        st.title("📰 Dokumentasi & Publikasi")
+    # --- MENU 3: MEDIA & BERITA (NAMA BARU) ---
+    elif pilihan == "📰 Media & Berita":
+        st.title("📰 Dokumentasi & Publikasi Terkini")
+        st.divider()
         for _, row in df_berita.iloc[::-1].iterrows():
-            st.markdown(f'<div class="card-container"><h3>{row["Kegiatan"]}</h3><p>📅 {row["Tanggal"]}</p></div>', unsafe_allow_html=True)
-            if str(row['Link']).startswith("http"):
-                st.markdown(f'<a href="{row["Link"]}" target="_blank" style="text-decoration:none; color:#4F46E5; font-weight:bold;">📂 Lihat Dokumentasi Lengkap</a>', unsafe_allow_html=True)
+            with st.container():
+                st.markdown(f'<div class="card-container"><h3>{row["Kegiatan"]}</h3><p>📅 {row["Tanggal"]}</p></div>', unsafe_allow_html=True)
+                if str(row['Link']).startswith("http"):
+                    st.markdown(f'<a href="{row["Link"]}" target="_blank" style="text-decoration:none; color:#4F46E5; font-weight:bold; padding:10px; background:#EEF2FF; border-radius:8px;">📂 Lihat Dokumentasi Lengkap</a>', unsafe_allow_html=True)
 
-    # --- MENU 4: UNDUH DATA ---
+    # --- MENU 4: PUSAT UNDUHAN (KEMBALI LENGKAP) ---
     elif pilihan == "📥 Pusat Unduhan":
-        st.title("📥 Akses Data Terbuka (Open Data)")
-        st.download_button("Simpan Data (CSV)", df_harga.to_csv(index=False).encode('utf-8'), "Harga_Ngada.csv", "text/csv")
+        st.title("📥 Open Data Center Kabupaten Ngada")
+        st.markdown("Silakan unduh data rekapitulasi harga dan laporan kegiatan di bawah ini.")
+        st.divider()
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.info("📊 **Data Harga Komoditas**")
+            st.download_button("Unduh CSV Harga", df_harga.to_csv(index=False).encode('utf-8'), "Harga_Ngada_Hari_Ini.csv", "text/csv", use_container_width=True)
+        
+        with col2:
+            st.success("📰 **Data Media & Berita**")
+            st.download_button("Unduh CSV Laporan Kegiatan", df_berita.to_csv(index=False).encode('utf-8'), "Laporan_Kegiatan_Ngada.csv", "text/csv", use_container_width=True)
 
     # --- MENU 5: KOMITMEN SMART ASN ---
     elif pilihan == "ℹ️ Komitmen Smart ASN":
         st.title("ℹ️ Menuju Birokrasi Digital")
         st.markdown("""
             <div class="card-container">
-                <h3 style="color: #059669;">Integritas & Adaptif</h3>
+                <h3 style="color: #059669;">Integritas & Pelayanan Prima</h3>
                 <p style="font-size: 1.1rem; line-height: 1.7;">
-                    Sebagai bagian dari <b>Bagian Perekonomian & SDA Kabupaten Ngada</b>, kami berkomitmen menjadi <b>Smart ASN</b> yang senantiasa meningkatkan penguasaan teknologi (IT Mastery) untuk mewujudkan transparansi data.
-                </p>
-                <p style="font-size: 1.1rem; line-height: 1.7;">
-                    Aplikasi Dashboard Ekonomi ini merupakan wujud nyata penerapan nilai <b>BerAKHLAK</b>, khususnya dalam memberikan pelayanan publik yang prima dan berkualitas bagi kesejahteraan Bapak Mama masyarakat Ngada.
+                    Sebagai bagian dari <b>Bagian Perekonomian & SDA Kabupaten Ngada</b>, kami berkomitmen menjadi <b>Smart ASN</b> yang adaptif dan menguasai teknologi untuk transparansi data publik.
                 </p>
                 <hr>
                 <p style="font-size: 0.85rem; color: #94A3B8;">
-                    <b>Visi Smart ASN:</b> Integritas | Nasionalisme | Profesionalisme | Berwawasan Global | IT Mastery | Hospitality | Networking | Entrepreneurship<br><br>
+                    <b>Visi Smart ASN:</b> Integritas | Profesionalisme | IT Mastery | Hospitality | Networking<br><br>
                     <i>Dikembangkan sebagai Proyek Aktualisasi Latsar CPNS Kabupaten Ngada Tahun 2026.</i>
                 </p>
             </div>
