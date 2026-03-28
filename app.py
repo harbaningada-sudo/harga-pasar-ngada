@@ -11,7 +11,7 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# --- 2. CSS KUSTOM (WARNA TEKS & TAMPILAN RESPONSIVE) ---
+# --- 2. CSS KUSTOM (WARNA TEKS & INDIKATOR VISUAL) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
@@ -28,10 +28,11 @@ st.markdown("""
     .hero-section {
         background: linear-gradient(135deg, #059669 0%, #10B981 100%);
         padding: 40px; border-radius: 20px; color: white !important;
-        margin-bottom: 20px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+        margin-bottom: 25px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
     }
     .hero-section h1, .hero-section p { color: white !important; }
 
+    /* Gaya Card Harga */
     .card-container {
         background: white !important; 
         padding: 20px; 
@@ -40,18 +41,19 @@ st.markdown("""
         margin-bottom: 15px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     }
-    .card-harga { border-left: 8px solid #059669; }
     
-    /* Tombol Dokumentasi */
+    /* Indikator Warna Samping */
+    .border-naik { border-left: 8px solid #DC2626; }    /* Merah */
+    .border-turun { border-left: 8px solid #059669; }   /* Hijau */
+    .border-stabil { border-left: 8px solid #94A3B8; }  /* Abu-abu */
+
+    .price-today { font-size: 1.4rem; font-weight: 800; color: #1E293B; }
+    .price-yesterday { font-size: 0.85rem; color: #64748B; }
+    
     .link-tombol {
         display: inline-block; padding: 10px 20px; background-color: #EEF2FF;
         color: #4F46E5 !important; border-radius: 10px; text-decoration: none;
         font-weight: 600; font-size: 0.9rem; border: 1px solid #C7D2FE;
-        margin-top: 10px;
-    }
-
-    @media (max-width: 640px) {
-        .hero-section h1 { font-size: 1.4rem; }
     }
 
     .block-container { padding-top: 5rem !important; }
@@ -61,11 +63,14 @@ st.markdown("""
 # --- 3. FUNGSI MEMUAT DATA ---
 @st.cache_data(ttl=60)
 def load_all_data():
+    # Load Data Harga
     url_h = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR54g3RrvlqqZ3ppTrKiKK-L1fVT8YSvnXfihtO-H795s0KQ6H_TewZLFFAXPi-ktMizomg3JHdIIjI/pub?gid=929993273&single=true&output=csv"
     df_h = pd.read_csv(url_h)
+    # Pastikan angka bersih dari teks
     df_h['HARGA HARI INI'] = pd.to_numeric(df_h['HARGA HARI INI'], errors='coerce').fillna(0)
-    df_h['SELISIH (Rp)'] = pd.to_numeric(df_h['SELISIH (Rp)'], errors='coerce').fillna(0)
+    df_h['HARGA KEMARIN'] = pd.to_numeric(df_h['HARGA KEMARIN'], errors='coerce').fillna(0)
     
+    # Load Data Berita
     url_b = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT2LMrwn5xk782uKyRGkeOzCXt3DDK-iBxe_F8RUkI7Zk4iYgMVcE_f0XbSc8R72Q/pub?gid=201409714&single=true&output=csv"
     df_b = pd.read_csv(url_b, skiprows=2)
     df_b.columns = ["No", "Kegiatan", "Tipe", "Link", "Tanggal"]
@@ -89,22 +94,26 @@ with st.sidebar:
 # --- 5. LOGIKA TAMPILAN ---
 if data_ok:
     if pilihan == "🏠 Dashboard Beranda":
-        # NARASI HALAMAN DEPAN
         st.markdown("""
             <div class="hero-section">
                 <h1>Halo, Bapak Mama & Saudara Semua! 👋</h1>
-                <p>Membantu Bapak dan Mama merencanakan belanja keluarga dengan informasi harga pangan yang jujur, cepat, dan transparan setiap hari.</p>
+                <p>Membantu Bapak dan Mama merencanakan belanja keluarga dengan informasi harga pangan yang jujur dan transparan setiap hari.</p>
             </div>
         """, unsafe_allow_html=True)
         
-        # GAMBAR DIPERKECIL (Gunakan Columns agar tidak mengganggu harga)
+        # Gambar Dokumentasi Proporsional
         col_img, col_txt = st.columns([1, 2])
         with col_img:
             img_path = "IMG_20251125_111048.jpg"
             if os.path.exists(img_path):
-                st.image(img_path, width=350, caption="📌 Dokumentasi Lapangan")
+                st.image(img_path, width=320, caption="📌 Dokumentasi Lapangan")
         with col_txt:
-            st.info("💡 **Tips Belanja:** Cek selisih harga hari ini. Jika ada kenaikan drastis, pertimbangkan untuk mencari alternatif komoditas lain.")
+            st.info("""
+                **Cara Membaca Indikator:**
+                * 🔴 **Merah:** Harga naik dibanding kemarin.
+                * 🟢 **Hijau:** Harga turun (Waktunya belanja!).
+                * ⚪ **Abu-abu:** Harga stabil/tetap.
+            """)
 
         st.divider()
         search = st.text_input("🔍 Cari komoditas hari ini...", "")
@@ -112,59 +121,70 @@ if data_ok:
         if search: df_show = df_show[df_show['KOMODITAS'].str.contains(search, case=False)]
 
         for _, row in df_show.iterrows():
-            selisih = int(row['SELISIH (Rp)'])
-            warna = "#DC2626" if selisih > 0 else ("#059669" if selisih < 0 else "#64748B")
-            simbol = "🔺" if selisih > 0 else ("🔹" if selisih < 0 else "➖")
+            h_hari_ini = int(row['HARGA HARI INI'])
+            h_kemarin = int(row['HARGA KEMARIN'])
+            selisih = h_hari_ini - h_kemarin
+            
+            # Logika Warna & Ikon
+            if selisih > 0:
+                status_css = "border-naik"
+                ikon = "🔺"
+                warna_teks = "#DC2626"
+                ket = f"Naik Rp {abs(selisih):,}"
+            elif selisih < 0:
+                status_css = "border-turun"
+                ikon = "🔻"
+                warna_teks = "#059669"
+                ket = f"Turun Rp {abs(selisih):,}"
+            else:
+                status_css = "border-stabil"
+                ikon = "➖"
+                warna_teks = "#64748B"
+                ket = "Stabil"
+
             st.markdown(f"""
-                <div class="card-container card-harga">
+                <div class="card-container {status_css}">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div><b>{row['KOMODITAS']}</b><br><small>Satuan: {row['SATUAN']}</small></div>
+                        <div>
+                            <b style="font-size: 1.1rem;">{row['KOMODITAS']}</b><br>
+                            <small style="color: #64748B;">Satuan: {row['SATUAN']}</small>
+                        </div>
                         <div style="text-align: right;">
-                            <span style="font-size: 1.2rem; font-weight: 800; color: #059669;">Rp {int(row['HARGA HARI INI']):,}.00</span><br>
-                            <span style="color: {warna}; font-size: 0.85rem; font-weight: 600;">{simbol} Rp {abs(selisih):,}</span>
+                            <span class="price-today">Rp {h_hari_ini:,}</span><br>
+                            <span style="color: {warna_teks}; font-weight: 600; font-size: 0.9rem;">{ikon} {ket}</span><br>
+                            <span class="price-yesterday">Kemarin: Rp {h_kemarin:,}</span>
                         </div>
                     </div>
                 </div>
             """, unsafe_allow_html=True)
 
     elif pilihan == "ℹ️ Informasi Layanan":
-        # NARASI TENTANG KAMI
         st.title("ℹ️ Dari Kami, Untuk Ngada")
         st.markdown("""
             <div class="card-container">
-                <h3 style="color: #059669;">Mengapa Kami Membangun Portal Ini?</h3>
-                <p style="font-size: 1.1rem; line-height: 1.7;">
-                    Bagi kami, <b>Bagian Perekonomian & SDA Kabupaten Ngada</b>, kesejahteraan Bapak dan Mama dimulai dari informasi yang terbuka. 
-                    Kami memahami bahwa setiap rupiah sangat berarti bagi keluarga.
-                </p>
-                <p style="font-size: 1.1rem; line-height: 1.7;">
-                    Portal ini hadir untuk menghilangkan keraguan saat melangkah ke pasar. Kami berkomitmen untuk terus mengawal 
-                    stabilitas harga dan memastikan Bapak Mama mendapatkan informasi yang paling akurat langsung dari sumbernya.
-                </p>
+                <h3 style="color: #059669;">Kesejahteraan Dimulai dari Keterbukaan</h3>
+                <p>Kami memahami bahwa setiap rupiah sangat berarti bagi keluarga di Ngada. Portal ini hadir untuk menghilangkan keraguan Bapak Mama saat melangkah ke pasar.</p>
+                <p><b>Bagian Perekonomian & SDA Kabupaten Ngada</b> berkomitmen mengawal stabilitas harga demi masyarakat yang lebih sejahtera.</p>
                 <hr>
-                <p style="font-size: 0.9rem; color: #64748B;">
-                    <i>Karya ini dipersembahkan sebagai wujud nyata dedikasi Smart ASN dalam Proyek Aktualisasi CPNS Kabupaten Ngada Tahun 2026.</i>
-                </p>
+                <p style="font-size: 0.8rem; color: #94A3B8;">Aktualisasi CPNS Kabupaten Ngada Tahun 2026 - Smart ASN.</p>
             </div>
         """, unsafe_allow_html=True)
 
-    # (Sisa menu Grafik, Berita, & Unduh tetap sama agar tidak hilang)
+    # Menu lain tetap ada agar fungsi tidak hilang
     elif pilihan == "📈 Tren Harga":
-        st.title("Tren Harga")
+        st.title("Grafik Tren")
         fig = px.bar(df_harga, x="KOMODITAS", y="HARGA HARI INI", color_discrete_sequence=['#059669'])
         st.plotly_chart(fig, use_container_width=True)
     elif pilihan == "📰 Berita & Media":
         st.title("Berita Terkini")
         for _, row in df_berita.iloc[::-1].iterrows():
             with st.container():
-                st.markdown(f'<div class="card-container"><h3>{row["Kegiatan"]}</h3>', unsafe_allow_html=True)
-                link = str(row['Link']).strip()
-                if link.startswith("http"):
-                    st.markdown(f'<a href="{link}" target="_blank" class="link-tombol">📂 Lihat Dokumentasi</a>', unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="card-container"><h3>{row["Kegiatan"]}</h3><p>{row["Tanggal"]}</p></div>', unsafe_allow_html=True)
+                if str(row['Link']).startswith("http"):
+                    st.markdown(f'<a href="{row["Link"]}" target="_blank" class="link-tombol">📂 Lihat Dokumentasi</a>', unsafe_allow_html=True)
     elif pilihan == "📥 Pusat Unduhan":
         st.title("Pusat Unduhan")
         st.download_button("Simpan Data (CSV)", df_harga.to_csv(index=False).encode('utf-8'), "Harga_Ngada.csv", "text/csv")
 
 else:
-    st.error("Gagal Memuat Data.")
+    st.error("Gagal Memuat Data. Pastikan Spreadsheet dapat diakses publik.")
