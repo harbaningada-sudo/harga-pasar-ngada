@@ -11,10 +11,12 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# --- 2. CSS KUSTOM (DESAIN MODERN & RAPI) ---
+# --- 2. CSS KUSTOM (OPTIMASI MOBILE & RESPONSIVE) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+    
+    /* Global Reset */
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
     .stApp { background-color: #F8FAFC; }
     
@@ -23,24 +25,44 @@ st.markdown("""
     [data-testid="collapsedControl"] { color: #FFFFFF !important; }
     [data-testid="collapsedControl"] svg { fill: #FFFFFF !important; }
     
-    /* Hero Banner Beranda */
+    /* Hero Banner Responsif */
     .hero-section {
         background: linear-gradient(135deg, #059669 0%, #10B981 100%);
-        padding: 45px; border-radius: 20px; color: white;
-        margin-bottom: 30px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+        padding: 30px; border-radius: 20px; color: white;
+        margin-bottom: 20px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
     }
+    .hero-section h1 { font-size: 1.8rem; font-weight: 800; }
+    .hero-section p { font-size: 1rem; opacity: 0.9; }
 
-    /* Card Box Informasi */
+    /* Card Box Responsif */
     .card-container {
-        background: white; padding: 25px; border-radius: 15px;
-        border: 1px solid #E2E8F0; margin-bottom: 20px;
+        background: white; padding: 20px; border-radius: 15px;
+        border: 1px solid #E2E8F0; margin-bottom: 15px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
         transition: 0.3s;
     }
-    .card-container:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
-    .card-harga { border-left: 8px solid #059669; }
+    .card-harga { border-left: 6px solid #059669; }
 
-    /* Desain Tombol Link Dokumentasi */
+    /* Pengaturan untuk Layar Kecil (HP) */
+    @media (max-width: 640px) {
+        .hero-section { padding: 20px; }
+        .hero-section h1 { font-size: 1.4rem; }
+        .hero-section p { font-size: 0.85rem; }
+        
+        .card-container { padding: 15px; }
+        .card-container span { font-size: 0.9rem !important; }
+        .card-container b, .card-container .price-text { font-size: 1.1rem !important; }
+        
+        /* Tombol agar memenuhi lebar layar di HP */
+        .link-tombol { 
+            display: block; 
+            text-align: center; 
+            width: 100%; 
+            box-sizing: border-box;
+        }
+    }
+
+    /* Tombol Link Dokumentasi */
     .link-tombol {
         display: inline-block; 
         padding: 10px 20px; 
@@ -53,28 +75,23 @@ st.markdown("""
         border: 1px solid #C7D2FE;
         margin-top: 10px;
     }
-    .link-tombol:hover { background-color: #E0E7FF; border-color: #4F46E5; }
 
     /* Jarak Aman Atas */
-    .block-container { padding-top: 5rem !important; }
+    .block-container { padding-top: 4rem !important; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 3. FUNGSI MEMUAT DATA ---
 @st.cache_data(ttl=60)
 def load_all_data():
-    # Data Harga Komoditas
     url_h = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR54g3RrvlqqZ3ppTrKiKK-L1fVT8YSvnXfihtO-H795s0KQ6H_TewZLFFAXPi-ktMizomg3JHdIIjI/pub?gid=929993273&single=true&output=csv"
     df_h = pd.read_csv(url_h)
     df_h['HARGA HARI INI'] = pd.to_numeric(df_h['HARGA HARI INI'], errors='coerce').fillna(0)
     df_h['SELISIH (Rp)'] = pd.to_numeric(df_h['SELISIH (Rp)'], errors='coerce').fillna(0)
     
-    # Data Berita & Dokumentasi
     url_b = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT2LMrwn5xk782uKyRGkeOzCXt3DDK-iBxe_F8RUkI7Zk4iYgMVcE_f0XbSc8R72Q/pub?gid=201409714&single=true&output=csv"
     df_b = pd.read_csv(url_b, skiprows=2)
     df_b.columns = ["No", "Kegiatan", "Tipe", "Link", "Tanggal"]
-    
-    # Filter baris kosong agar tidak ada error tampilan
     df_b = df_b.dropna(subset=['Kegiatan'])
     df_b = df_b[df_b['Kegiatan'].astype(str).str.strip() != ""]
     
@@ -87,14 +104,14 @@ except Exception as e:
     data_ok = False
     pesan_error = e
 
-# --- 4. SIDEBAR NAVIGASI (SEMUA MENU KEMBALI) ---
+# --- 4. SIDEBAR NAVIGASI ---
 with st.sidebar:
     st.markdown("<br>", unsafe_allow_html=True)
     if os.path.exists("logo_ngada.png"):
         st.image("logo_ngada.png", use_container_width=True)
     st.markdown("<h3 style='text-align: center; color: #059669; margin-top: -10px;'>PEMKAB NGADA</h3>", unsafe_allow_html=True)
     st.divider()
-    pilihan = st.radio("Pilih Menu Layanan:", [
+    pilihan = st.radio("Pilih Menu:", [
         "🏠 Dashboard Beranda", 
         "📈 Tren & Analisis Harga", 
         "📰 Berita & Media", 
@@ -102,21 +119,17 @@ with st.sidebar:
         "ℹ️ Informasi Layanan"
     ])
 
-# --- 5. LOGIKA TAMPILAN KONTEN ---
+# --- 5. LOGIKA TAMPILAN ---
 if data_ok:
-    # --- MENU 1: BERANDA ---
     if pilihan == "🏠 Dashboard Beranda":
         st.markdown("""
             <div class="hero-section">
-                <h1 style='margin:0; color:white;'>Halo, Bapak Mama & Saudara Semua! 👋</h1>
-                <p style='font-size:1.2rem; opacity:0.9;'>
-                    Pemerintah hadir untuk memastikan dapur kita tetap mengepul. 
-                    Pantau harga pangan hari ini agar belanja lebih tenang dan terencana.
-                </p>
+                <h1>Halo, Bapak Mama & Saudara Semua! 👋</h1>
+                <p>Pantau harga pangan hari ini agar belanja lebih tenang dan terencana.</p>
             </div>
         """, unsafe_allow_html=True)
         
-        search = st.text_input("🔍 Cari bahan makanan hari ini (misal: Beras, Telur, Cabai)...", "")
+        search = st.text_input("🔍 Cari komoditas...", "")
         df_show = df_harga.copy()
         if search: 
             df_show = df_show[df_show['KOMODITAS'].str.contains(search, case=False)]
@@ -130,82 +143,54 @@ if data_ok:
                 <div class="card-container card-harga">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div>
-                            <span style="font-size: 1.15rem; font-weight: 700;">{row['KOMODITAS']}</span><br>
-                            <span style="color: #64748B; font-size: 0.85rem;">Satuan: {row['SATUAN']}</span>
+                            <span style="font-size: 1.1rem; font-weight: 700;">{row['KOMODITAS']}</span><br>
+                            <span style="color: #64748B; font-size: 0.8rem;">Satuan: {row['SATUAN']}</span>
                         </div>
                         <div style="text-align: right;">
-                            <span style="font-size: 1.5rem; font-weight: 800; color: #059669;">Rp {int(row['HARGA HARI INI']):,}.00</span><br>
-                            <span style="color: {warna}; font-size: 0.95rem; font-weight: 600;">{simbol} Selisih: Rp {abs(selisih):,}</span>
+                            <span class="price-text" style="font-size: 1.3rem; font-weight: 800; color: #059669;">Rp {int(row['HARGA HARI INI']):,}.00</span><br>
+                            <span style="color: {warna}; font-size: 0.85rem; font-weight: 600;">{simbol} Rp {abs(selisih):,}</span>
                         </div>
                     </div>
                 </div>
             """, unsafe_allow_html=True)
 
-    # --- MENU 2: TREN HARGA ---
     elif pilihan == "📈 Tren & Analisis Harga":
-        st.title("📈 Komparasi Harga Pangan")
-        st.markdown("Bandingkan harga kemarin dan hari ini untuk merencanakan belanja Anda.")
-        st.divider()
+        st.title("📈 Komparasi Harga")
         list_k = df_harga['KOMODITAS'].unique().tolist()
         pick = st.multiselect("Pilih Komoditas:", options=list_k, default=list_k[:5])
-        
         if pick:
             df_p = df_harga[df_harga['KOMODITAS'].isin(pick)].melt(id_vars=['KOMODITAS'], value_vars=['HARGA KEMARIN', 'HARGA HARI INI'], var_name='Waktu', value_name='Harga')
             fig = px.bar(df_p, x='KOMODITAS', y='Harga', color='Waktu', barmode='group', text_auto='.2s', color_discrete_map={'HARGA KEMARIN': '#94A3B8', 'HARGA HARI INI': '#059669'})
             st.plotly_chart(fig, use_container_width=True)
 
-    # --- MENU 3: BERITA & MEDIA (SISTEM KLIK LINK) ---
     elif pilihan == "📰 Berita & Media":
-        st.title("📰 Informasi & Dokumentasi Terkini")
-        st.markdown("Klik tombol dokumentasi untuk melihat lampiran lengkap.")
-        st.divider()
-        
-        # Urutkan dari berita terbaru (baris paling bawah di excel muncul duluan)
+        st.title("📰 Informasi Terkini")
         for _, row in df_berita.iloc[::-1].iterrows():
             with st.container():
                 st.markdown(f'<div class="card-container"><h3>{row["Kegiatan"]}</h3>', unsafe_allow_html=True)
-                
                 link = str(row['Link']).strip()
-
                 if link.startswith("http"):
-                    st.markdown(f'<a href="{link}" target="_blank" class="link-tombol">📂 Lihat Dokumentasi Lengkap</a>', unsafe_allow_html=True)
+                    st.markdown(f'<a href="{link}" target="_blank" class="link-tombol">📂 Lihat Dokumentasi</a>', unsafe_allow_html=True)
                 else:
-                    st.caption("ℹ️ Dokumentasi sedang diproses oleh petugas.")
-                
+                    st.caption("ℹ️ Dokumentasi dalam proses.")
                 if row['Tanggal'] and str(row['Tanggal']) != "0":
-                    st.markdown(f'<p style="color:gray; font-size:0.8rem; margin-top:10px;">📅 Tanggal: {row["Tanggal"]}</p>', unsafe_allow_html=True)
+                    st.markdown(f'<p style="color:gray; font-size:0.75rem; margin-top:8px;">📅 {row["Tanggal"]}</p>', unsafe_allow_html=True)
                 st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- MENU 4: UNDUH DATA ---
     elif pilihan == "📥 Pusat Unduhan":
-        st.title("📥 Akses Data Terbuka")
-        st.markdown("Unduh rekapitulasi data untuk keperluan analisis atau pelaporan.")
+        st.title("📥 Unduh Data")
         col1, col2 = st.columns(2)
         with col1:
-            st.success("📊 Data Harga Komoditas")
-            st.download_button("Unduh CSV Harga", df_harga.to_csv(index=False).encode('utf-8'), "Harga_Ngada.csv", "text/csv", use_container_width=True)
+            st.download_button("📊 CSV Harga", df_harga.to_csv(index=False).encode('utf-8'), "Harga_Ngada.csv", "text/csv", use_container_width=True)
         with col2:
-            st.info("📰 Data Berita & Kegiatan")
-            st.download_button("Unduh CSV Berita", df_berita.to_csv(index=False).encode('utf-8'), "Berita_Ngada.csv", "text/csv", use_container_width=True)
+            st.download_button("📰 CSV Berita", df_berita.to_csv(index=False).encode('utf-8'), "Berita_Ngada.csv", "text/csv", use_container_width=True)
 
-    # --- MENU 5: INFORMASI LAYANAN ---
     elif pilihan == "ℹ️ Informasi Layanan":
-        st.title("ℹ️ Dari Kami, Untuk Ngada")
+        st.title("ℹ️ Tentang Kami")
         st.markdown("""
             <div class="card-container">
-                <h3 style="color: #059669;">Mengapa Aplikasi Ini Ada?</h3>
-                <p style="font-size: 1.1rem; line-height: 1.6;">
-                    Aplikasi ini adalah wujud kepedulian kami, <b>Bagian Perekonomian & SDA Kabupaten Ngada</b>, 
-                    untuk melindungi hak Bapak dan Mama mendapatkan informasi harga yang jujur dan transparan.
-                </p>
-                <p style="font-size: 1.1rem; line-height: 1.6;">
-                    Melalui digitalisasi ini, kami ingin memastikan tidak ada lagi keraguan saat Bapak dan Mama 
-                    melangkah ke pasar. Karena bagi kami, kesejahteraan keluarga di Ngada adalah prioritas utama.
-                </p>
-                <hr>
-                <p style="font-size: 0.9rem; color: #64748B;">
-                    <i>Dikembangkan dengan sepenuh hati sebagai Proyek Aktualisasi CPNS Kabupaten Ngada Tahun 2026.</i>
-                </p>
+                <h3 style="color: #059669;">Kesejahteraan Ngada adalah Prioritas</h3>
+                <p>Aplikasi ini hadir untuk memberikan kepastian harga bagi seluruh masyarakat. Dikembangkan oleh <b>Bagian Perekonomian & SDA</b> sebagai komitmen Smart ASN.</p>
             </div>
         """, unsafe_allow_html=True)
 
