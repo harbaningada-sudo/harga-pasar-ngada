@@ -11,15 +11,28 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# --- 2. LOGIKA MEMORI PUBLIK (GLOBAL CACHE) ---
-# Fungsi ini akan menyimpan pilihan yang sama untuk SEMUA user yang buka web
+# --- 2. LOGIKA KEAMANAN ADMIN (EMAIL-BASED) ---
+# MASUKKAN EMAIL GOOGLE ANDA DI SINI
+EMAIL_ADMIN_RESMI = "harbaningada-sudo@gmail.com" # Ganti dengan email Anda jika berbeda
+
+def check_is_admin():
+    # Streamlit Cloud secara otomatis menangkap email user yang login
+    try:
+        user_email = st.user.email
+        return user_email == EMAIL_ADMIN_RESMI
+    except:
+        return False
+
+is_admin_user = check_is_admin()
+
+# --- 3. LOGIKA MEMORI PUBLIK (GLOBAL CACHE) ---
 @st.cache_resource
 def get_global_settings():
     return {"pilihan_admin": []}
 
 global_settings = get_global_settings()
 
-# --- 3. CSS KUSTOM (SMART ASN & RAMAH MASYARAKAT) ---
+# --- 4. CSS KUSTOM (SMART ASN & RAMAH MASYARAKAT) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
@@ -46,7 +59,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. FUNGSI MUAT DATA ---
+# --- 5. FUNGSI MUAT DATA ---
 @st.cache_data(ttl=60)
 def load_all_data():
     try:
@@ -59,6 +72,7 @@ def load_all_data():
                 current_cat = str(row['KOMODITAS']).upper()
             categories.append(current_cat)
         df_h['KATEGORI_INDUK'] = categories
+        
         url_b = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT2LMrwn5xk782uKyRGkeOzCXt3DDK-iBxe_F8RUkI7Zk4iYgMVcE_f0XbSc8R72Q/pub?gid=201409714&single=true&output=csv"
         df_b = pd.read_csv(url_b, skiprows=2)
         df_b.columns = ["No", "Kegiatan", "Tipe", "Link", "Tanggal"]
@@ -68,10 +82,11 @@ def load_all_data():
 
 df_harga, df_berita = load_all_data()
 
-# --- 5. SIDEBAR ---
+# --- 6. SIDEBAR ---
 with st.sidebar:
     st.markdown("<br>", unsafe_allow_html=True)
-    if os.path.exists("logo_ngada.png"): st.image("logo_ngada.png", use_container_width=True)
+    if os.path.exists("logo_ngada.png"): 
+        st.image("logo_ngada.png", use_container_width=True)
     st.divider()
     pilihan = st.radio("Menu Layanan Digital:", [
         "🏠 Dashboard Beranda", 
@@ -81,17 +96,21 @@ with st.sidebar:
         "ℹ️ Komitmen Smart ASN"
     ])
     
-    # FITUR KHUSUS ADMIN (Subtle/Tersembunyi)
-    st.divider()
-    is_admin = st.checkbox("Mode Admin (Kunci Tren)")
+    # KUNCI KEAMANAN: Menu Admin hanya muncul jika Email Login Cocok
+    mode_admin_aktif = False
+    if is_admin_user:
+        st.divider()
+        st.markdown(f"### 🔐 Admin: {st.user.email}")
+        mode_admin_aktif = st.checkbox("Aktifkan Kunci Tren Publik")
 
-# --- 6. LOGIKA TAMPILAN ---
+# --- 7. LOGIKA TAMPILAN ---
 if not df_harga.empty:
     if pilihan == "🏠 Dashboard Beranda":
         st.markdown('<div class="hero-section"><h1>Smart Economy Ngada 👋</h1><p>Pelayanan transparan terhadap harga komoditas bagi masyarakat Ngada.</p></div>', unsafe_allow_html=True)
         col_foto, col_data = st.columns([1, 2])
         with col_foto:
-            if os.path.exists("IMG_20251125_111048.jpg"): st.image("IMG_20251125_111048.jpg", use_container_width=True, caption="Dokumentasi Pasar")
+            if os.path.exists("IMG_20251125_111048.jpg"): 
+                st.image("IMG_20251125_111048.jpg", use_container_width=True, caption="Dokumentasi Pasar")
         with col_data:
             search = st.text_input("🔍 Cari komoditas...", "")
             df_show = df_harga.copy()
@@ -113,28 +132,27 @@ if not df_harga.empty:
 
     elif pilihan == "📈 Tren Harga Komoditas":
         st.title("📈 Tren Harga Terkini")
-        st.markdown("Berikut adalah daftar komoditas pilihan yang dipantau secara intensif oleh tim ekonomi.")
+        st.markdown("Daftar komoditas pilihan yang dipantau intensif oleh Bagian Perekonomian & SDA.")
         
         df_valid = df_harga.dropna(subset=['SATUAN'])
         list_komoditas = df_valid['KOMODITAS'].unique().tolist()
         
-        # JIKA ADMIN: Bisa mengubah pilihan publik
-        if is_admin:
-            st.warning("Anda sedang dalam Mode Admin. Pilihan Anda di bawah ini akan tampil di SEMUA device masyarakat.")
-            pilihan_baru = st.multiselect("Pilih komoditas untuk ditampilkan ke publik:", options=list_komoditas, default=global_settings["pilihan_admin"])
-            if st.button("Kunci & Publikasikan Tren"):
+        # HANYA ANDA (ADMIN) YANG BISA MELIHAT BAGIAN INI
+        if mode_admin_aktif:
+            st.warning(f"⚠️ LOGIN SEBAGAI: {st.user.email}. Pilihan Anda akan tampil di semua device.")
+            pilihan_baru = st.multiselect("Pilih komoditas untuk publik:", options=list_komoditas, default=global_settings["pilihan_admin"])
+            if st.button("🚀 Kunci & Publikasikan ke Publik"):
                 global_settings["pilihan_admin"] = pilihan_baru
-                st.success("Pilihan berhasil dikunci! Sekarang masyarakat akan melihat daftar ini secara otomatis.")
+                st.success("Tren berhasil diperbarui untuk semua pengguna!")
         
-        # TAMPILAN UNTUK MASYARAKAT (OTOMATIS MUNCUL)
+        # TAMPILAN OTOMATIS UNTUK MASYARAKAT
         pilihan_final = global_settings["pilihan_admin"]
-        
         if pilihan_final:
             df_plot = df_valid[df_valid['KOMODITAS'].isin(pilihan_final)].melt(id_vars=['KOMODITAS'], value_vars=['HARGA KEMARIN', 'HARGA HARI INI'], var_name='Waktu', value_name='Harga (Rp)')
             fig = px.bar(df_plot, x="KOMODITAS", y="Harga (Rp)", color="Waktu", barmode="group", text_auto='.2s', color_discrete_map={'HARGA KEMARIN': '#94A3B8', 'HARGA HARI INI': '#059669'})
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("Belum ada tren komoditas yang dikunci oleh admin untuk ditampilkan.")
+            st.info("💡 Belum ada data tren yang dipublikasikan oleh Admin.")
 
     elif pilihan == "📰 Media & Berita":
         st.title("📰 Media & Berita")
@@ -153,7 +171,7 @@ if not df_harga.empty:
 
     elif pilihan == "ℹ️ Komitmen Smart ASN":
         st.title("ℹ️ Komitmen Smart ASN")
-        st.markdown('<div class="card-container"><h3>Transparansi & Akuntabilitas</h3><p>Inovasi digital ini menjamin masyarakat mendapatkan akses informasi harga yang jujur dan akurat langsung dari sumbernya.</p></div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-container"><h3>Transparansi Berbasis Teknologi</h3><p>Inovasi digital ini menjamin masyarakat mendapatkan akses informasi harga yang jujur dan akurat langsung dari sumbernya.</p></div>', unsafe_allow_html=True)
 
 else:
     st.error("⚠️ Gagal memuat data.")
