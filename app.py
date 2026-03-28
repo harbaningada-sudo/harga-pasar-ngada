@@ -41,9 +41,10 @@ def load_data_harga():
 
 @st.cache_data(ttl=600)
 def load_data_berita():
-    # Menggunakan gid dari tab Laporan Kegiatan yang sudah ada (atau sesuaikan jika buat tab baru)
     url_berita = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT2LMrwn5xk782uKyRGkeOzCXt3DDK-iBxe_F8RUkI7Zk4iYgMVcE_f0XbSc8R72Q/pub?gid=201409714&single=true&output=csv"
     df = pd.read_csv(url_berita, skiprows=2)
+    # Membersihkan nama kolom dari spasi yang tidak terlihat
+    df.columns = df.columns.str.strip()
     return df.fillna("")
 
 try:
@@ -91,32 +92,41 @@ if data_tersedia:
         st.markdown("Informasi terbaru seputar perekonomian di Kabupaten Ngada.")
         st.divider()
 
-        # Kita asumsikan kolom di Excel: Kegiatan (Judul), Tindak Lanjut (Tipe), Unnamed: 3 (Konten/Link)
-        for index, row in df_berita.iterrows():
-            with st.container():
-                st.markdown(f"""<div class="card-berita">
-                    <h3>{row['Kegiatan']}</h3>
-                    <p style="color: gray; font-size: 0.8rem;">Update: {row['Keterangan']}</p>
-                """, unsafe_allow_html=True)
+        if df_berita.empty:
+            st.info("Belum ada berita yang tersedia.")
+        else:
+            for index, row in df_berita.iterrows():
+                # Cek apakah kolom 'Kegiatan' ada, jika tidak pakai kolom pertama
+                judul = row['Kegiatan'] if 'Kegiatan' in row else row.iloc[1]
+                # Cek kolom keterangan/tanggal
+                info_tambahan = row['Keterangan'] if 'Keterangan' in row else ""
                 
-                tipe = str(row['Tindak Lanjut']).lower()
-                konten = row['Unnamed: 3']
+                with st.container():
+                    st.markdown(f"""<div class="card-berita">
+                        <h3>{judul}</h3>
+                        <p style="color: gray; font-size: 0.8rem;">Update: {info_tambahan}</p>
+                    """, unsafe_allow_html=True)
+                    
+                    # Logika untuk konten (Foto/Video/Jadwal)
+                    tipe = str(row['Tindak Lanjut']).lower() if 'Tindak Lanjut' in row else ""
+                    # Mencari link di kolom ke-4 (Unnamed: 3)
+                    konten = row['Unnamed: 3'] if 'Unnamed: 3' in row else row.iloc[3]
 
-                if 'foto' in tipe:
-                    st.image(konten, use_container_width=True, caption=row['Kegiatan'])
-                elif 'video' in tipe:
-                    st.video(konten)
-                elif 'jadwal' in tipe or 'pasar murah' in tipe:
-                    st.markdown(f'<span class="tag-jadwal">📍 JADWAL PASAR MURAH</span>', unsafe_allow_html=True)
-                    st.info(f"**Detail Pelaksanaan:**\n\n{konten}")
-                
-                st.markdown("</div>", unsafe_allow_html=True)
+                    if 'foto' in tipe:
+                        st.image(konten, use_container_width=True)
+                    elif 'video' in tipe:
+                        st.video(konten)
+                    elif 'jadwal' in tipe:
+                        st.markdown(f'<span class="tag-jadwal">📍 JADWAL PASAR MURAH</span>', unsafe_allow_html=True)
+                        st.info(f"{konten}")
+                    
+                    st.markdown("</div>", unsafe_allow_html=True)
 
     elif pilihan == "📥 Pusat Unduhan":
         st.title("📥 Pusat Unduhan")
         col1, col2 = st.columns(2)
         with col1:
-            st.subheader("Data Harga")
+            st.success("📊 **Data Harga Komoditas**")
             st.download_button("⬇️ Unduh CSV Harga", data=df_harga.to_csv(index=False).encode('utf-8'), file_name='Harga_Ngada.csv', mime='text/csv', use_container_width=True)
 
     elif pilihan == "ℹ️ Informasi Layanan":
