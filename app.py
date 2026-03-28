@@ -18,7 +18,11 @@ def get_global_settings():
 
 global_settings = get_global_settings()
 
-# --- 3. CSS KUSTOM (SMART ASN & RAMAH MASYARAKAT) ---
+# --- 3. DETEKSI JALUR RAHASIA (URL PARAMETER) ---
+# Hanya jika link mengandung ?status=set maka kotak password muncul
+jalur_rahasia = st.query_params.get("status") == "set"
+
+# --- 4. CSS KUSTOM (SMART ASN & RAMAH MASYARAKAT) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
@@ -45,7 +49,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. FUNGSI MUAT DATA ---
+# --- 5. FUNGSI MUAT DATA ---
 @st.cache_data(ttl=60)
 def load_all_data():
     try:
@@ -67,7 +71,7 @@ def load_all_data():
 
 df_harga, df_berita = load_all_data()
 
-# --- 5. SIDEBAR ---
+# --- 6. SIDEBAR ---
 with st.sidebar:
     st.markdown("<br>", unsafe_allow_html=True)
     if os.path.exists("logo_ngada.png"): st.image("logo_ngada.png", use_container_width=True)
@@ -80,13 +84,16 @@ with st.sidebar:
         "ℹ️ Komitmen Smart ASN"
     ])
     
-    # --- PANEL ADMIN DENGAN PASSWORD (Paling Aman) ---
-    st.divider()
-    # Gunakan password sederhana saja biar cepat
-    pass_input = st.text_input("🔑 Akses Admin", type="password")
-    is_admin = (pass_input == "ngada2026") # Password Anda: ngada2026
+    # --- PANEL ADMIN TERSEMBUNYI TOTAL ---
+    is_admin = False
+    if jalur_rahasia:
+        st.divider()
+        pass_input = st.text_input("🔑 Verifikasi Petugas", type="password")
+        if pass_input == "ngada2026":
+            is_admin = True
+            st.success("Akses Diterima")
 
-# --- 6. LOGIKA TAMPILAN ---
+# --- 7. LOGIKA TAMPILAN ---
 if not df_harga.empty:
     if pilihan == "🏠 Dashboard Beranda":
         st.markdown('<div class="hero-section"><h1>Smart Economy Ngada 👋</h1><p>Pelayanan transparan terhadap harga komoditas bagi masyarakat Ngada.</p></div>', unsafe_allow_html=True)
@@ -114,27 +121,25 @@ if not df_harga.empty:
 
     elif pilihan == "📈 Tren Harga Komoditas":
         st.title("📈 Tren Harga Terkini")
-        st.markdown("Berikut adalah komoditas pilihan yang dipantau secara intensif.")
-        
         df_valid = df_harga.dropna(subset=['SATUAN'])
         list_komoditas = df_valid['KOMODITAS'].unique().tolist()
         
-        # JIKA PASSWORD BENAR: TAMPILKAN SETTING ADMIN
+        # JIKA ADMIN BERHASIL MASUK
         if is_admin:
-            st.success("✅ Mode Admin Aktif")
-            pilihan_baru = st.multiselect("Pilih komoditas untuk Publik:", options=list_komoditas, default=global_settings["pilihan_admin"])
-            if st.button("🚀 Publikasikan Sekarang"):
+            st.warning("⚙️ MODE PENGATURAN TREN")
+            pilihan_baru = st.multiselect("Tentukan komoditas yang tampil di publik:", options=list_komoditas, default=global_settings["pilihan_admin"])
+            if st.button("🚀 Publikasikan"):
                 global_settings["pilihan_admin"] = pilihan_baru
-                st.rerun() # Refresh otomatis
+                st.rerun()
         
-        # TAMPILAN UNTUK SEMUA ORANG
+        # TAMPILAN PUBLIK
         pilihan_final = global_settings["pilihan_admin"]
         if pilihan_final:
             df_plot = df_valid[df_valid['KOMODITAS'].isin(pilihan_final)].melt(id_vars=['KOMODITAS'], value_vars=['HARGA KEMARIN', 'HARGA HARI INI'], var_name='Waktu', value_name='Harga (Rp)')
             fig = px.bar(df_plot, x="KOMODITAS", y="Harga (Rp)", color="Waktu", barmode="group", text_auto='.2s', color_discrete_map={'HARGA KEMARIN': '#94A3B8', 'HARGA HARI INI': '#059669'})
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("💡 Belum ada data tren yang dipublikasikan oleh Admin.")
+            st.info("💡 Pantau tren harga komoditas pilihan tim ekonomi di sini.")
 
     elif pilihan == "📰 Media & Berita":
         st.title("📰 Media & Berita")
@@ -146,14 +151,14 @@ if not df_harga.empty:
                 st.markdown(f'<a href="{link}" target="_blank" style="text-decoration:none; color:#4F46E5; font-weight:bold; padding:10px; background:#EEF2FF; border-radius:8px;">📂 Lihat Detail</a>', unsafe_allow_html=True)
 
     elif pilihan == "📥 Pusat Unduhan":
-        st.title("📥 Open Data Center")
+        st.title("📥 Pusat Unduhan")
         col1, col2 = st.columns(2)
         with col1: st.download_button("Unduh CSV Harga", df_harga.to_csv(index=False).encode('utf-8'), "Harga_Ngada.csv", "text/csv", use_container_width=True)
         with col2: st.download_button("Unduh CSV Berita", df_berita.to_csv(index=False).encode('utf-8'), "Media_Ngada.csv", "text/csv", use_container_width=True)
 
     elif pilihan == "ℹ️ Komitmen Smart ASN":
         st.title("ℹ️ Komitmen Smart ASN")
-        st.markdown('<div class="card-container"><h3>Transparansi & Akuntabilitas</h3><p>Inovasi digital ini menjamin masyarakat mendapatkan akses informasi harga yang jujur dan akurat langsung dari sumbernya.</p></div>', unsafe_allow_html=True)
+        st.markdown('<div class="card-container"><h3>Transparansi & Akuntabilitas</h3><p>Inovasi digital ini menjamin masyarakat mendapatkan akses informasi harga yang jujur dan akurat.</p></div>', unsafe_allow_html=True)
 
 else:
     st.error("⚠️ Gagal memuat data.")
