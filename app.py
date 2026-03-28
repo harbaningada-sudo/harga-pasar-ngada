@@ -14,15 +14,12 @@ st.markdown("""
     .stApp { background-color: #F8FAFC; }
     header { background-color: #059669 !important; z-index: 99999 !important; } 
     
-    /* Hero Banner */
     .hero-section {
         background: linear-gradient(135deg, #059669 0%, #10B981 100%);
         padding: 40px; border-radius: 20px; color: white !important;
         margin-bottom: 25px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
     }
-    .hero-section h1, .hero-section p { color: white !important; }
 
-    /* Gaya Card Kelompok/Judul (Tanpa Angka) */
     .group-header {
         background: #E2E8F0; padding: 12px 20px; border-radius: 10px;
         margin-top: 25px; margin-bottom: 15px; font-weight: 800;
@@ -30,7 +27,6 @@ st.markdown("""
         text-transform: uppercase; letter-spacing: 1px;
     }
 
-    /* Gaya Card Harga */
     .card-container {
         background: white !important; padding: 25px; border-radius: 15px;
         border: 1px solid #E2E8F0; margin-bottom: 15px;
@@ -51,9 +47,18 @@ st.markdown("""
 @st.cache_data(ttl=60)
 def load_all_data():
     try:
-        url_h = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR54g3RrvlqqZ3ppTrKiKK-L1fVT8YSvnXfihtO-H795s0KQ6H_TewZLFFAXPi-ktMizomg3JHdIIjI/pub?gid=929993273&single=true&output=csv"
+        url_h = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR54g3RrvlqqZ3ppTrKiKK-L1fVT8YSvnXfihtO-H795s0KQ6H_TewZLFFAXPi-ktMizomg3JHdII,jI/pub?gid=929993273&single=true&output=csv"
         df_h = pd.read_csv(url_h)
         
+        # Identifikasi Kelompok: Tambahkan kolom 'KATEGORI' berdasarkan baris yang SATUAN-nya kosong
+        current_cat = "LAIN-LAIN"
+        categories = []
+        for i, row in df_h.iterrows():
+            if pd.isna(row['SATUAN']):
+                current_cat = row['KOMODITAS']
+            categories.append(current_cat)
+        df_h['KATEGORI_INDUK'] = categories
+
         url_b = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT2LMrwn5xk782uKyRGkeOzCXt3DDK-iBxe_F8RUkI7Zk4iYgMVcE_f0XbSc8R72Q/pub?gid=201409714&single=true&output=csv"
         df_b = pd.read_csv(url_b, skiprows=2)
         df_b.columns = ["No", "Kegiatan", "Tipe", "Link", "Tanggal"]
@@ -75,18 +80,29 @@ if not df_harga.empty:
     if pilihan == "🏠 Dashboard Beranda":
         st.markdown('<div class="hero-section"><h1>Smart Economy Ngada 👋</h1><p>Pantau harga pasar hari ini. Transparan, Akurat, dan Akuntabel.</p></div>', unsafe_allow_html=True)
         
-        search = st.text_input("🔍 Cari komoditas (Smart Search)...", "")
-        df_show = df_harga.copy()
-        if search: 
-            df_show = df_show[df_show['KOMODITAS'].str.contains(search, case=False, na=False)]
+        search = st.text_input("🔍 Cari komoditas atau kelompok (Contoh: Ayam, Telur, Beras)...", "")
+        
+        # Filter Data
+        if search:
+            # Cari baris yang cocok ATAU baris yang Kategori Induknya cocok
+            mask = (df_harga['KOMODITAS'].str.contains(search, case=False, na=False)) | \
+                   (df_harga['KATEGORI_INDUK'].str.contains(search, case=False, na=False))
+            df_show = df_harga[mask]
+        else:
+            df_show = df_harga.copy()
 
+        last_header = ""
         for _, row in df_show.iterrows():
-            # CEK APAKAH INI JUDUL KELOMPOK (NaN di Satuan/Harga)
-            if pd.isna(row['SATUAN']) or pd.isna(row['HARGA HARI INI']):
-                st.markdown(f'<div class="group-header">📂 {row["KOMODITAS"]}</div>', unsafe_allow_html=True)
+            # Tampilkan Header Kelompok jika berganti kategori
+            if row['KATEGORI_INDUK'] != last_header:
+                st.markdown(f'<div class="group-header">📂 KELOMPOK: {row["KATEGORI_INDUK"]}</div>', unsafe_allow_html=True)
+                last_header = row['KATEGORI_INDUK']
+
+            # Abaikan baris yang sebenarnya adalah baris Header itu sendiri agar tidak double
+            if pd.isna(row['SATUAN']):
                 continue
 
-            # JIKA BUKAN JUDUL, TAMPILKAN SEBAGAI HARGA
+            # Tampilkan Data Komoditas
             try:
                 h_ini = int(pd.to_numeric(row['HARGA HARI INI'], errors='coerce') or 0)
                 h_kmrn = int(pd.to_numeric(row['HARGA KEMARIN'], errors='coerce') or 0)
@@ -111,10 +127,9 @@ if not df_harga.empty:
             except:
                 pass
 
-    # (Sisa menu lainnya tetap sama agar fitur tidak hilang)
+    # (Sisa menu lainnya tetap sama)
     elif pilihan == "📈 Tren Harga":
         st.title("Tren Harga")
-        # Grafik hanya ambil yang ada angkanya
         df_chart = df_harga.dropna(subset=['SATUAN', 'HARGA HARI INI'])
         fig = px.bar(df_chart, x="KOMODITAS", y="HARGA HARI INI", color_discrete_sequence=['#059669'])
         st.plotly_chart(fig, use_container_width=True)
@@ -127,8 +142,8 @@ if not df_harga.empty:
                 st.markdown(f'<a href="{row["Link"]}" target="_blank" style="text-decoration:none; color:#4F46E5; font-weight:bold;">📂 Lihat Dokumentasi</a>', unsafe_allow_html=True)
                 
     elif pilihan == "ℹ️ Komitmen ASN":
-        st.title("Smart ASN")
-        st.info("Aplikasi ini adalah wujud nyata transformasi digital Bagian Perekonomian & SDA Kabupaten Ngada untuk melayani masyarakat.")
+        st.title("Smart ASN Ngada")
+        st.info("Inovasi digital untuk pengawasan ekonomi yang lebih akuntabel.")
 
 else:
     st.error("⚠️ Gagal memuat data.")
