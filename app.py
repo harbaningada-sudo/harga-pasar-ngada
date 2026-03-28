@@ -47,26 +47,23 @@ st.markdown("""
 @st.cache_data(ttl=60)
 def load_all_data():
     try:
-        # Link Google Sheets Harga
         url_h = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR54g3RrvlqqZ3ppTrKiKK-L1fVT8YSvnXfihtO-H795s0KQ6H_TewZLFFAXPi-ktMizomg3JHdIIjI/pub?gid=929993273&single=true&output=csv"
         df_h = pd.read_csv(url_h)
         
-        # Logika Kategori Otomatis
+        # Penentuan Kategori Otomatis berdasarkan Satuan Kosong
         current_cat = "LAIN-LAIN"
         categories = []
         for i, row in df_h.iterrows():
-            if pd.isna(row['SATUAN']):
+            if pd.isna(row['SATUAN']) or str(row['SATUAN']).strip() == "":
                 current_cat = str(row['KOMODITAS']).upper()
             categories.append(current_cat)
         df_h['KATEGORI_INDUK'] = categories
 
-        # Link Google Sheets Berita
         url_b = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT2LMrwn5xk782uKyRGkeOzCXt3DDK-iBxe_F8RUkI7Zk4iYgMVcE_f0XbSc8R72Q/pub?gid=201409714&single=true&output=csv"
         df_b = pd.read_csv(url_b, skiprows=2)
         df_b.columns = ["No", "Kegiatan", "Tipe", "Link", "Tanggal"]
         return df_h, df_b.dropna(subset=['Kegiatan']).fillna("")
-    except Exception as e:
-        st.error(f"Detail Error: {e}") # Muncul jika ada masalah teknis
+    except:
         return pd.DataFrame(), pd.DataFrame()
 
 df_harga, df_berita = load_all_data()
@@ -74,7 +71,8 @@ df_harga, df_berita = load_all_data()
 # --- 4. SIDEBAR ---
 with st.sidebar:
     st.markdown("<br>", unsafe_allow_html=True)
-    if os.path.exists("logo_ngada.png"): st.image("logo_ngada.png", use_container_width=True)
+    if os.path.exists("logo_ngada.png"): 
+        st.image("logo_ngada.png", use_container_width=True)
     st.divider()
     pilihan = st.radio("Menu Layanan:", [
         "🏠 Dashboard Beranda", 
@@ -91,7 +89,7 @@ if not df_harga.empty:
         
         search = st.text_input("🔍 Cari komoditas atau kelompok (Contoh: Ayam, Telur, Beras)...", "")
         
-        # Logika Pencarian Pintar
+        # Filter Data
         if search:
             mask = (df_harga['KOMODITAS'].str.contains(search, case=False, na=False)) | \
                    (df_harga['KATEGORI_INDUK'].str.contains(search, case=False, na=False))
@@ -101,57 +99,65 @@ if not df_harga.empty:
 
         last_header = ""
         for _, row in df_show.iterrows():
-            # Munculkan Header jika berganti kategori
+            # Tampilkan Header Kelompok
             if row['KATEGORI_INDUK'] != last_header:
                 st.markdown(f'<div class="group-header">📂 KELOMPOK: {row["KATEGORI_INDUK"]}</div>', unsafe_allow_html=True)
                 last_header = row['KATEGORI_INDUK']
 
-            # Jangan tampilkan baris header sebagai kartu harga
-            if pd.isna(row['SATUAN']):
+            # JANGAN PROSES BARIS JUDUL (Satuan Kosong) SEBAGAI KARTU HARGA
+            if pd.isna(row['SATUAN']) or str(row['SATUAN']).strip() == "":
                 continue
 
-            # Tampilkan Kartu Harga
-            h_ini = int(pd.to_numeric(row['HARGA HARI INI'], errors='coerce') or 0)
-            h_kmrn = int(pd.to_numeric(row['HARGA KEMARIN'], errors='coerce') or 0)
-            selisih = h_ini - h_kmrn
-            
-            if selisih > 0: css, ikon, warna, ket = "border-naik", "🔺", "#DC2626", f"Naik Rp {abs(selisih):,}"
-            elif selisih < 0: css, ikon, warna, ket = "border-turun", "🔻", "#059669", f"Turun Rp {abs(selisih):,}"
-            else: css, ikon, warna, ket = "border-stabil", "➖", "#64748B", "Stabil"
+            # TAMPILKAN KARTU HARGA (Hanya untuk baris yang punya satuan)
+            try:
+                # Perbaikan Error: pd.to_numeric menangani teks yang masuk ke kolom angka
+                h_ini_raw = pd.to_numeric(row['HARGA HARI INI'], errors='coerce')
+                h_kmrn_raw = pd.to_numeric(row['HARGA KEMARIN'], errors='coerce')
+                
+                h_ini = int(h_ini_raw) if not pd.isna(h_ini_raw) else 0
+                h_kmrn = int(h_kmrn_raw) if not pd.isna(h_kmrn_raw) else 0
+                selisih = h_ini - h_kmrn
+                
+                if selisih > 0: css, ikon, warna, ket = "border-naik", "🔺", "#DC2626", f"Naik Rp {abs(selisih):,}"
+                elif selisih < 0: css, ikon, warna, ket = "border-turun", "🔻", "#059669", f"Turun Rp {abs(selisih):,}"
+                else: css, ikon, warna, ket = "border-stabil", "➖", "#64748B", "Stabil"
 
-            st.markdown(f"""
-                <div class="card-container {css}">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div><b>{row['KOMODITAS']}</b><br><small>Satuan: {row['SATUAN']}</small></div>
-                        <div style="text-align: right;">
-                            <span class="price-main">Rp {h_ini:,}</span><br>
-                            <span style="color: {warna}; font-weight: 700; font-size: 0.95rem;">{ikon} {ket}</span><br>
-                            <span class="price-sub">Harga Kemarin: Rp {h_kmrn:,}</span>
+                st.markdown(f"""
+                    <div class="card-container {css}">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div><b>{row['KOMODITAS']}</b><br><small>Satuan: {row['SATUAN']}</small></div>
+                            <div style="text-align: right;">
+                                <span class="price-main">Rp {h_ini:,}</span><br>
+                                <span style="color: {warna}; font-weight: 700; font-size: 0.95rem;">{ikon} {ket}</span><br>
+                                <span class="price-sub">Harga Kemarin: Rp {h_kmrn:,}</span>
+                            </div>
                         </div>
                     </div>
-                </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
+            except:
+                continue
 
     elif pilihan == "📈 Tren Harga":
-        st.title("📈 Grafik Analisis Harga")
-        df_chart = df_harga.dropna(subset=['SATUAN', 'HARGA HARI INI'])
+        st.title("📈 Analisis Tren Harga")
+        # Hanya ambil data yang punya satuan (bukan judul kategori)
+        df_chart = df_harga.dropna(subset=['SATUAN'])
         fig = px.bar(df_chart, x="KOMODITAS", y="HARGA HARI INI", color_discrete_sequence=['#059669'])
         st.plotly_chart(fig, use_container_width=True)
     
     elif pilihan == "📰 Berita Digital":
-        st.title("📰 Informasi & Media")
+        st.title("📰 Informasi & Berita")
         for _, row in df_berita.iloc[::-1].iterrows():
             st.markdown(f'<div class="card-container"><h3>{row["Kegiatan"]}</h3><p>📅 {row["Tanggal"]}</p></div>', unsafe_allow_html=True)
             if str(row['Link']).startswith("http"):
-                st.markdown(f'<a href="{row["Link"]}" target="_blank" style="text-decoration:none; color:#4F46E5; font-weight:bold;">📂 Lihat Dokumentasi Lengkap</a>', unsafe_allow_html=True)
+                st.markdown(f'<a href="{row["Link"]}" target="_blank" style="text-decoration:none; color:#4F46E5; font-weight:bold;">📂 Lihat Dokumentasi</a>', unsafe_allow_html=True)
                 
     elif pilihan == "📥 Unduh Data":
         st.title("📥 Pusat Unduhan")
-        st.download_button("Simpan Data Harga (CSV)", df_harga.to_csv(index=False).encode('utf-8'), "Harga_Ngada.csv", "text/csv")
+        st.download_button("Simpan Data (CSV)", df_harga.to_csv(index=False).encode('utf-8'), "Harga_Ngada.csv", "text/csv")
 
     elif pilihan == "ℹ️ Komitmen ASN":
-        st.title("ℹ️ Tentang Smart ASN Ngada")
-        st.info("Aplikasi ini dibangun untuk mendukung transparansi ekonomi Kabupaten Ngada berbasis teknologi.")
+        st.title("ℹ️ Tentang Smart ASN")
+        st.info("Inovasi ini adalah bagian dari Proyek Aktualisasi CPNS Kabupaten Ngada Tahun 2026.")
 
 else:
-    st.error("⚠️ Gagal memuat data. Mohon cek kembali koneksi internet atau format Spreadsheet Anda.")
+    st.error("⚠️ Gagal memuat data. Mohon cek format Spreadsheet Anda.")
