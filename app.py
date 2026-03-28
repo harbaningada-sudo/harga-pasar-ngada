@@ -93,7 +93,7 @@ if data_ok:
     if pilihan == "🏠 Dashboard Beranda":
         st.markdown("""
             <div class="hero-section">
-                <h1 style='margin:0; color:white;'>Horas, Bapak Mama & Saudara Semua! 👋</h1>
+                <h1 style='margin:0; color:white;'>Halo, Bapak Mama & Saudara Semua! 👋</h1>
                 <p style='font-size:1.2rem; opacity:0.9;'>
                     Pemerintah hadir untuk memastikan dapur kita tetap mengepul. 
                     Pantau harga pangan hari ini agar belanja lebih tenang dan terencana.
@@ -139,10 +139,9 @@ if data_ok:
             fig = px.bar(df_p, x='KOMODITAS', y='Harga', color='Waktu', barmode='group', text_auto='.2s', color_discrete_map={'HARGA KEMARIN': '#94A3B8', 'HARGA HARI INI': '#059669'})
             st.plotly_chart(fig, use_container_width=True)
 
-    # --- MENU 3: BERITA & MEDIA (OTOMATIS TANPA ANGKA 0) ---
+    # --- MENU 3: BERITA & MEDIA ---
     elif pilihan == "📰 Berita & Media":
         st.title("📰 Informasi & Dokumentasi Terkini")
-        st.markdown("Dokumentasi kegiatan dan informasi pasar murah untuk masyarakat Ngada.")
         st.divider()
         
         for _, row in df_berita.iterrows():
@@ -152,10 +151,8 @@ if data_ok:
                 tipe = str(row['Tipe']).lower()
                 link = str(row['Link']).strip()
 
-                # LOGIKA ANTI-NOL: Media hanya muncul jika link valid diawali http
                 if link and link != "0" and link != "0.0" and link.startswith("http"):
                     if "drive.google.com" in link:
-                        # Konversi Link Drive Otomatis
                         f_id = link.split('/')[-2] if '/view' in link else link.split('=')[-1]
                         link = f"https://drive.google.com/uc?export=view&id={f_id}"
                     
@@ -173,7 +170,6 @@ if data_ok:
     # --- MENU 4: UNDUH DATA ---
     elif pilihan == "📥 Pusat Unduhan":
         st.title("📥 Akses Data Terbuka")
-        st.markdown("Silakan unduh rekapitulasi data untuk keperluan laporan atau analisis mandiri.")
         col1, col2 = st.columns(2)
         with col1:
             st.success("📊 Data Harga Komoditas")
@@ -182,16 +178,15 @@ if data_ok:
             st.info("📰 Data Berita & Kegiatan")
             st.download_button("Unduh CSV Berita", df_berita.to_csv(index=False).encode('utf-8'), "Berita_Ngada.csv", "text/csv", use_container_width=True)
 
-    # --- MENU 5: INFORMASI LAYANAN (NARASI MENYENTUH) ---
+    # --- MENU 5: INFORMASI LAYANAN ---
     elif pilihan == "ℹ️ Informasi Layanan":
         st.title("ℹ️ Dari Kami, Untuk Ngada")
         st.markdown("""
             <div class="card-container">
                 <h3 style="color: #059669;">Mengapa Aplikasi Ini Ada?</h3>
                 <p style="font-size: 1.1rem; line-height: 1.6;">
-                    Aplikasi ini bukan sekadar angka dan grafik. Ia adalah wujud kepedulian kami, 
-                    <b>Bagian Perekonomian & SDA Kabupaten Ngada</b>, untuk melindungi hak Bapak dan Mama 
-                    mendapatkan informasi harga yang jujur dan transparan.
+                    Aplikasi ini adalah wujud kepedulian kami, <b>Bagian Perekonomian & SDA Kabupaten Ngada</b>, 
+                    untuk melindungi hak Bapak dan Mama mendapatkan informasi harga yang jujur dan transparan.
                 </p>
                 <p style="font-size: 1.1rem; line-height: 1.6;">
                     Melalui digitalisasi ini, kami ingin memastikan tidak ada lagi keraguan saat Bapak dan Mama 
