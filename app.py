@@ -12,7 +12,7 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# --- 2. LOGIKA MEMORI PUBLIK (GLOBAL CACHE) ---
+# --- 2. LOGIKA MEMORI PUBLIK ---
 @st.cache_resource
 def get_global_settings():
     return {
@@ -79,36 +79,41 @@ def get_img_as_base64(file):
         with open(file, "rb") as f: return base64.b64encode(f.read()).decode()
     except: return ""
 
-# --- 5. FUNGSI MUAT DATA (DISESUAIKAN DENGAN STRUKTUR SPREADSHEET BARU) ---
+# --- 5. MUAT DATA ---
 @st.cache_data(ttl=60)
 def load_all_data():
     try:
-        # Gunakan link CSV dari spreadsheet yang baru diupload (gid 1673392597)
+        # Link CSV dari file 'publikasi harga' (Sheet1)
         url_h = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR54g3RrvlqqZ3ppTrKiKK-L1fVT8YSvnXfihtO-H795s0KQ6H_TewZLFFAXPi-ktMizomg3JHdIIjI/pub?gid=1673392597&single=true&output=csv"
-        df_h = pd.read_csv(url_h, skiprows=5) # Kita skip 5 baris header yang ribet itu
         
-        # Nama kolom kita beri manual agar konsisten
-        df_h.columns = ['KOMODITAS', 'SATUAN', 'BESAR_KEMARIN', 'BESAR_HARI_INI', 'KECIL_KEMARIN', 'KECIL_HARI_INI', 'SELISIH', 'PERUBAHAN', 'STATUS']
+        # Sesuai gambar: Data asli mulai dari baris 7 (setelah header gabungan)
+        # Kita gunakan usecols untuk ambil kolom A, C, D, E, F, G saja
+        df_raw = pd.read_csv(url_h, skiprows=6) 
         
-        # Membersihkan baris kosong
+        # Ambil kolom yang dibutuhkan saja (A, C, D, E, F, G)
+        df_h = df_raw.iloc[:, [0, 2, 3, 4, 5, 6]]
+        df_h.columns = ['KOMODITAS', 'SATUAN', 'BESAR_KEMARIN', 'BESAR_HARI_INI', 'KECIL_KEMARIN', 'KECIL_HARI_INI']
+        
+        # Hapus baris yang komoditasnya kosong
         df_h = df_h.dropna(subset=['KOMODITAS'])
         
-        # Logika Kategori (Induk)
+        # Logika Kategori Otomatis (Jika SATUAN kosong, berarti itu Judul Kategori)
         current_cat = "LAIN-LAIN"
         categories = []
         for i, row in df_h.iterrows():
-            if pd.isna(row['SATUAN']) or str(row['SATUAN']).strip() == "":
+            if pd.isna(row['SATUAN']) or str(row['SATUAN']).strip() == "" or str(row['SATUAN']).strip() == "3":
                 current_cat = str(row['KOMODITAS']).upper()
             categories.append(current_cat)
         df_h['KATEGORI_INDUK'] = categories
         
-        # Load data Berita (gid berbeda)
+        # Data Berita
         url_b = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT2LMrwn5xk782uKyRGkeOzCXt3DDK-iBxe_F8RUkI7Zk4iYgMVcE_f0XbSc8R72Q/pub?gid=201409714&single=true&output=csv"
         df_b = pd.read_csv(url_b, skiprows=2)
         df_b.columns = ["No", "Kegiatan", "Tipe", "Link", "Tanggal"]
         
         return df_h, df_b.dropna(subset=['Kegiatan']).fillna("")
     except Exception as e:
+        st.write(f"Detail Error: {e}") # Debugging
         return pd.DataFrame(), pd.DataFrame()
 
 df_harga, df_berita = load_all_data()
@@ -143,14 +148,6 @@ if not df_harga.empty:
     if pilihan == "🏠 Dashboard Beranda":
         st.markdown(f'<div class="hero-section"><h1>{global_settings["hero_title"]}</h1><p>{global_settings["hero_subtitle"]}</p></div>', unsafe_allow_html=True)
         
-        if is_admin:
-            with st.expander("📝 Edit Tulisan Dashboard"):
-                new_title = st.text_input("Judul:", value=global_settings["hero_title"])
-                new_sub = st.text_area("Sub-judul:", value=global_settings["hero_subtitle"])
-                if st.button("Simpan"):
-                    global_settings["hero_title"], global_settings["hero_subtitle"] = new_title, new_sub
-                    st.rerun()
-
         col_foto, col_data = st.columns([1, 2])
         with col_foto:
             if os.path.exists("IMG_20251125_111048.jpg"): st.image("IMG_20251125_111048.jpg", use_container_width=True, caption="Dokumentasi Pasar")
@@ -162,16 +159,15 @@ if not df_harga.empty:
             
             last_header = ""
             for _, row in df_show.iterrows():
-                if row['KATEGORI_INDUK'] != last_header:
-                    st.markdown(f'<div class="group-header">📂 {row["KATEGORI_INDUK"]}</div>', unsafe_allow_html=True)
-                    last_header = row['KATEGORI_INDUK']
+                # Jika baris adalah header kategori (Satuan kosong)
+                if pd.isna(row['SATUAN']) or str(row['SATUAN']).strip() == "" or str(row['SATUAN']).strip() == "3":
+                    st.markdown(f'<div class="group-header">📂 {row["KOMODITAS"]}</div>', unsafe_allow_html=True)
+                    continue
                 
-                if pd.isna(row['SATUAN']) or str(row['SATUAN']).strip() == "": continue
-                
-                # Tampilan harga dengan 2 jenis pedagang
+                # Tampilan harga
                 st.markdown(f"""
                 <div class="card-container">
-                    <div style="display: flex; justify-content: space-between;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div><b>{row['KOMODITAS']}</b><br><small>Satuan: {row['SATUAN']}</small></div>
                         <div style="text-align: right;">
                             <div class="price-sub">Pedagang Besar: <b>Rp {row['BESAR_HARI_INI']}</b></div>
@@ -182,14 +178,13 @@ if not df_harga.empty:
                 """, unsafe_allow_html=True)
 
     elif pilihan == "📈 Tren Harga Komoditas":
-        st.title("📈 Tren Harga Terpilih")
-        df_valid = df_harga.dropna(subset=['SATUAN'])
+        st.title("📈 Tren Harga Komoditas")
+        df_valid = df_harga[df_harga['SATUAN'].notna()]
         list_komoditas = df_valid['KOMODITAS'].unique().tolist()
         
         if is_admin:
             st.warning("⚙️ MODE PENGATURAN TREN")
-            safe_defaults = [x for x in global_settings["pilihan_admin"] if x in list_komoditas]
-            pilihan_baru = st.multiselect("Pilih komoditas:", options=list_komoditas, default=safe_defaults)
+            pilihan_baru = st.multiselect("Pilih komoditas:", options=list_komoditas, default=[x for x in global_settings["pilihan_admin"] if x in list_komoditas])
             if st.button("🚀 Publikasikan"):
                 global_settings["pilihan_admin"] = pilihan_baru
                 st.rerun()
@@ -197,14 +192,12 @@ if not df_harga.empty:
         pilihan_final = global_settings["pilihan_admin"]
         if pilihan_final:
             df_plot = df_valid[df_valid['KOMODITAS'].isin(pilihan_final)]
-            # Kita tampilkan tren harga Pedagang Kecil (yang bersentuhan langsung dengan masyarakat)
             df_melt = df_plot.melt(id_vars=['KOMODITAS'], value_vars=['KECIL_KEMARIN', 'KECIL_HARI_INI'], var_name='Waktu', value_name='Harga (Rp)')
             fig = px.bar(df_melt, x="KOMODITAS", y="Harga (Rp)", color="Waktu", barmode="group", text_auto='.2s', color_discrete_map={'KECIL_KEMARIN': '#94A3B8', 'KECIL_HARI_INI': '#059669'})
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("Belum ada tren yang dipublikasikan.")
+            st.info("Pilih komoditas di Mode Admin untuk melihat grafik tren.")
 
-    # Menu lain (Media, Unduhan, Komitmen) tetap berfungsi normal...
     elif pilihan == "📰 Media & Berita":
         st.title("📰 Media & Berita")
         for _, row in df_berita.iloc[::-1].iterrows():
@@ -223,11 +216,6 @@ if not df_harga.empty:
     elif pilihan == "ℹ️ Komitmen Smart ASN":
         st.title("ℹ️ Komitmen Smart ASN")
         st.markdown(f'<div class="card-container"><h3>Transparansi & Akuntabilitas</h3><p>{global_settings["about_text"]}</p></div>', unsafe_allow_html=True)
-        if is_admin:
-            with st.expander("📝 Edit Komitmen"):
-                new_about = st.text_area("Isi:", value=global_settings["about_text"])
-                if st.button("Simpan Komitmen"):
-                    global_settings["about_text"] = new_about
-                    st.rerun()
+
 else:
-    st.error("⚠️ Gagal memuat data. Periksa koneksi Spreadsheet.")
+    st.error("⚠️ Gagal memuat data. Periksa apakah Spreadsheet sudah di-Publish to Web.")
