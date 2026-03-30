@@ -25,7 +25,7 @@ def get_global_settings():
 global_settings = get_global_settings()
 jalur_rahasia = st.query_params.get("status") == "set"
 
-# --- 3. CSS KUSTOM (TEKS HITAM & SIDEBAR MEWAH) ---
+# --- 3. CSS KUSTOM (FIX TEKS HITAM & SIDEBAR MEWAH) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
@@ -37,31 +37,20 @@ st.markdown("""
     .stApp { background-color: #FFFFFF !important; }
     header { background-color: #059669 !important; }
 
-    /* Header Sidebar dengan Background Foto */
     .sidebar-header-box {
-        position: relative;
-        width: 100%;
-        height: 220px;
-        border-radius: 15px;
-        overflow: hidden;
-        margin-bottom: 20px;
+        position: relative; width: 100%; height: 220px;
+        border-radius: 15px; overflow: hidden; margin-bottom: 20px;
     }
     .bg-pimpinan {
         width: 100%; height: 100%; object-fit: cover;
         position: absolute; top: 0; left: 0; z-index: 1;
     }
     .overlay-info {
-        position: absolute;
-        bottom: 10px; left: 10px; z-index: 2;
-        background: rgba(255, 255, 255, 0.9);
-        padding: 8px; border-radius: 8px;
-        border: 1px solid #059669;
-        max-width: 90%;
+        position: absolute; bottom: 10px; left: 10px; z-index: 2;
+        background: rgba(255, 255, 255, 0.9); padding: 8px; border-radius: 8px;
+        border: 1px solid #059669; max-width: 90%;
     }
-    .dept-name {
-        font-size: 0.7rem; font-weight: 800; color: #059669 !important;
-        line-height: 1.2; margin-top: 4px;
-    }
+    .dept-name { font-size: 0.7rem; font-weight: 800; color: #059669 !important; line-height: 1.2; margin-top: 4px; }
 
     .hero-section {
         background: linear-gradient(135deg, #059669 0%, #10B981 100%);
@@ -79,25 +68,32 @@ st.markdown("""
         border: 1px solid #E2E8F0; margin-bottom: 10px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     }
-    .price-main { font-size: 1.4rem; font-weight: 800; color: #000000 !important; }
+    .price-main { font-size: 1.2rem; font-weight: 800; color: #000000 !important; }
+    .price-sub { font-size: 0.9rem; color: #475569 !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. FUNGSI PEMBANTU (IMAGE TO BASE64) ---
+# --- 4. IMAGE HELPER ---
 def get_img_as_base64(file):
     try:
-        with open(file, "rb") as f:
-            data = f.read()
-        return base64.b64encode(data).decode()
-    except:
-        return ""
+        with open(file, "rb") as f: return base64.b64encode(f.read()).decode()
+    except: return ""
 
-# --- 5. MUAT DATA ---
+# --- 5. FUNGSI MUAT DATA (DISESUAIKAN DENGAN STRUKTUR SPREADSHEET BARU) ---
 @st.cache_data(ttl=60)
 def load_all_data():
     try:
-        url_h = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR54g3RrvlqqZ3ppTrKiKK-L1fVT8YSvnXfihtO-H795s0KQ6H_TewZLFFAXPi-ktMizomg3JHdIIjI/pub?gid=929993273&single=true&output=csv"
-        df_h = pd.read_csv(url_h)
+        # Gunakan link CSV dari spreadsheet yang baru diupload (gid 1673392597)
+        url_h = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR54g3RrvlqqZ3ppTrKiKK-L1fVT8YSvnXfihtO-H795s0KQ6H_TewZLFFAXPi-ktMizomg3JHdIIjI/pub?gid=1673392597&single=true&output=csv"
+        df_h = pd.read_csv(url_h, skiprows=5) # Kita skip 5 baris header yang ribet itu
+        
+        # Nama kolom kita beri manual agar konsisten
+        df_h.columns = ['KOMODITAS', 'SATUAN', 'BESAR_KEMARIN', 'BESAR_HARI_INI', 'KECIL_KEMARIN', 'KECIL_HARI_INI', 'SELISIH', 'PERUBAHAN', 'STATUS']
+        
+        # Membersihkan baris kosong
+        df_h = df_h.dropna(subset=['KOMODITAS'])
+        
+        # Logika Kategori (Induk)
         current_cat = "LAIN-LAIN"
         categories = []
         for i, row in df_h.iterrows():
@@ -105,18 +101,20 @@ def load_all_data():
                 current_cat = str(row['KOMODITAS']).upper()
             categories.append(current_cat)
         df_h['KATEGORI_INDUK'] = categories
+        
+        # Load data Berita (gid berbeda)
         url_b = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT2LMrwn5xk782uKyRGkeOzCXt3DDK-iBxe_F8RUkI7Zk4iYgMVcE_f0XbSc8R72Q/pub?gid=201409714&single=true&output=csv"
         df_b = pd.read_csv(url_b, skiprows=2)
         df_b.columns = ["No", "Kegiatan", "Tipe", "Link", "Tanggal"]
+        
         return df_h, df_b.dropna(subset=['Kegiatan']).fillna("")
-    except:
+    except Exception as e:
         return pd.DataFrame(), pd.DataFrame()
 
 df_harga, df_berita = load_all_data()
 
 # --- 6. SIDEBAR ---
 with st.sidebar:
-    # Tampilan Header Sidebar Mewah
     img_pimpinan = get_img_as_base64("Bupati-dan-Wakil-Bupati-Ngada-jpg.jpeg")
     img_logo = get_img_as_base64("logo_ngada.png")
     
@@ -130,9 +128,7 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
-    pilihan = st.radio("Menu Layanan Digital:", [
-        "🏠 Dashboard Beranda", "📈 Tren Harga Komoditas", "📰 Media & Berita", "📥 Pusat Unduhan", "ℹ️ Komitmen Smart ASN"
-    ])
+    pilihan = st.radio("Menu Layanan Digital:", ["🏠 Dashboard Beranda", "📈 Tren Harga Komoditas", "📰 Media & Berita", "📥 Pusat Unduhan", "ℹ️ Komitmen Smart ASN"])
     
     is_admin = False
     if jalur_rahasia:
@@ -142,44 +138,48 @@ with st.sidebar:
             is_admin = True
             st.success("Akses Admin Aktif!")
 
-# --- 7. LOGIKA TAMPILAN UTAMA ---
+# --- 7. TAMPILAN ---
 if not df_harga.empty:
     if pilihan == "🏠 Dashboard Beranda":
         st.markdown(f'<div class="hero-section"><h1>{global_settings["hero_title"]}</h1><p>{global_settings["hero_subtitle"]}</p></div>', unsafe_allow_html=True)
         
         if is_admin:
             with st.expander("📝 Edit Tulisan Dashboard"):
-                new_title = st.text_input("Ganti Judul Besar:", value=global_settings["hero_title"])
-                new_sub = st.text_area("Ganti Sub-judul:", value=global_settings["hero_subtitle"])
-                if st.button("Simpan Perubahan Dashboard"):
-                    global_settings["hero_title"] = new_title
-                    global_settings["hero_subtitle"] = new_sub
-                    st.success("Berhasil diperbarui!")
+                new_title = st.text_input("Judul:", value=global_settings["hero_title"])
+                new_sub = st.text_area("Sub-judul:", value=global_settings["hero_subtitle"])
+                if st.button("Simpan"):
+                    global_settings["hero_title"], global_settings["hero_subtitle"] = new_title, new_sub
                     st.rerun()
 
         col_foto, col_data = st.columns([1, 2])
         with col_foto:
-            if os.path.exists("IMG_20251125_111048.jpg"): 
-                st.image("IMG_20251125_111048.jpg", use_container_width=True, caption="Dokumentasi Pemantauan Pasar")
+            if os.path.exists("IMG_20251125_111048.jpg"): st.image("IMG_20251125_111048.jpg", use_container_width=True, caption="Dokumentasi Pasar")
         
         with col_data:
             search = st.text_input("🔍 Cari komoditas...", "")
             df_show = df_harga.copy()
             if search: df_show = df_show[df_show['KOMODITAS'].str.contains(search, case=False, na=False)]
+            
             last_header = ""
             for _, row in df_show.iterrows():
                 if row['KATEGORI_INDUK'] != last_header:
                     st.markdown(f'<div class="group-header">📂 {row["KATEGORI_INDUK"]}</div>', unsafe_allow_html=True)
                     last_header = row['KATEGORI_INDUK']
+                
                 if pd.isna(row['SATUAN']) or str(row['SATUAN']).strip() == "": continue
-                try:
-                    h_ini = int(pd.to_numeric(row['HARGA HARI INI'], errors='coerce') or 0)
-                    h_kmrn = int(pd.to_numeric(row['HARGA KEMARIN'], errors='coerce') or 0)
-                    selisih = h_ini - h_kmrn
-                    warna = "#DC2626" if selisih > 0 else "#059669" if selisih < 0 else "#94A3B8"
-                    ikon = "🔺" if selisih > 0 else "🔻" if selisih < 0 else "➖"
-                    st.markdown(f'<div class="card-container" style="border-left: 10px solid {warna};"><div style="display: flex; justify-content: space-between; align-items: center;"><div><b>{row["KOMODITAS"]}</b><br><small>Satuan: {row["SATUAN"]}</small></div><div style="text-align: right;"><span class="price-main">Rp {h_ini:,}</span><br><span style="color: {warna}; font-weight: 700;">{ikon} Rp {abs(selisih):,}</span><br><small style="color: #000000;">Kemarin: Rp {h_kmrn:,}</small></div></div></div>', unsafe_allow_html=True)
-                except: continue
+                
+                # Tampilan harga dengan 2 jenis pedagang
+                st.markdown(f"""
+                <div class="card-container">
+                    <div style="display: flex; justify-content: space-between;">
+                        <div><b>{row['KOMODITAS']}</b><br><small>Satuan: {row['SATUAN']}</small></div>
+                        <div style="text-align: right;">
+                            <div class="price-sub">Pedagang Besar: <b>Rp {row['BESAR_HARI_INI']}</b></div>
+                            <div class="price-main">Pedagang Kecil: Rp {row['KECIL_HARI_INI']}</div>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
     elif pilihan == "📈 Tren Harga Komoditas":
         st.title("📈 Tren Harga Terpilih")
@@ -189,22 +189,22 @@ if not df_harga.empty:
         if is_admin:
             st.warning("⚙️ MODE PENGATURAN TREN")
             safe_defaults = [x for x in global_settings["pilihan_admin"] if x in list_komoditas]
-            pilihan_baru = st.multiselect("Pilih komoditas untuk publik:", options=list_komoditas, default=safe_defaults)
-            if st.button("🚀 Publikasikan ke Semua Device"):
+            pilihan_baru = st.multiselect("Pilih komoditas:", options=list_komoditas, default=safe_defaults)
+            if st.button("🚀 Publikasikan"):
                 global_settings["pilihan_admin"] = pilihan_baru
-                st.success("Tren berhasil diperbarui!")
                 st.rerun()
         
         pilihan_final = global_settings["pilihan_admin"]
         if pilihan_final:
-            pilihan_final = [x for x in pilihan_final if x in list_komoditas]
-            if pilihan_final:
-                df_plot = df_valid[df_valid['KOMODITAS'].isin(pilihan_final)].melt(id_vars=['KOMODITAS'], value_vars=['HARGA KEMARIN', 'HARGA HARI INI'], var_name='Waktu', value_name='Harga (Rp)')
-                fig = px.bar(df_plot, x="KOMODITAS", y="Harga (Rp)", color="Waktu", barmode="group", text_auto='.2s', color_discrete_map={'HARGA KEMARIN': '#94A3B8', 'HARGA HARI INI': '#059669'})
-                st.plotly_chart(fig, use_container_width=True)
+            df_plot = df_valid[df_valid['KOMODITAS'].isin(pilihan_final)]
+            # Kita tampilkan tren harga Pedagang Kecil (yang bersentuhan langsung dengan masyarakat)
+            df_melt = df_plot.melt(id_vars=['KOMODITAS'], value_vars=['KECIL_KEMARIN', 'KECIL_HARI_INI'], var_name='Waktu', value_name='Harga (Rp)')
+            fig = px.bar(df_melt, x="KOMODITAS", y="Harga (Rp)", color="Waktu", barmode="group", text_auto='.2s', color_discrete_map={'KECIL_KEMARIN': '#94A3B8', 'KECIL_HARI_INI': '#059669'})
+            st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("💡 Belum ada data tren yang dipublikasikan oleh Admin.")
+            st.info("Belum ada tren yang dipublikasikan.")
 
+    # Menu lain (Media, Unduhan, Komitmen) tetap berfungsi normal...
     elif pilihan == "📰 Media & Berita":
         st.title("📰 Media & Berita")
         for _, row in df_berita.iloc[::-1].iterrows():
@@ -217,18 +217,17 @@ if not df_harga.empty:
     elif pilihan == "📥 Pusat Unduhan":
         st.title("📥 Pusat Unduhan")
         col1, col2 = st.columns(2)
-        with col1: st.download_button("Unduh CSV Harga", df_harga.to_csv(index=False).encode('utf-8'), "Harga_Ngada.csv", "text/csv", use_container_width=True)
-        with col2: st.download_button("Unduh CSV Berita", df_berita.to_csv(index=False).encode('utf-8'), "Media_Ngada.csv", "text/csv", use_container_width=True)
+        with col1: st.download_button("Unduh CSV Harga", df_harga.to_csv(index=False).encode('utf-8'), "Harga_Ngada.csv", "text/csv")
+        with col2: st.download_button("Unduh CSV Berita", df_berita.to_csv(index=False).encode('utf-8'), "Media_Ngada.csv", "text/csv")
 
     elif pilihan == "ℹ️ Komitmen Smart ASN":
         st.title("ℹ️ Komitmen Smart ASN")
         st.markdown(f'<div class="card-container"><h3>Transparansi & Akuntabilitas</h3><p>{global_settings["about_text"]}</p></div>', unsafe_allow_html=True)
         if is_admin:
-            with st.expander("📝 Edit Penjelasan Tentang Kami"):
-                new_about = st.text_area("Ganti Isi Komitmen:", value=global_settings["about_text"])
-                if st.button("Simpan Perubahan Komitmen"):
+            with st.expander("📝 Edit Komitmen"):
+                new_about = st.text_area("Isi:", value=global_settings["about_text"])
+                if st.button("Simpan Komitmen"):
                     global_settings["about_text"] = new_about
-                    st.success("Teks komitmen berhasil diperbarui!")
                     st.rerun()
 else:
-    st.error("⚠️ Gagal memuat data.")
+    st.error("⚠️ Gagal memuat data. Periksa koneksi Spreadsheet.")
