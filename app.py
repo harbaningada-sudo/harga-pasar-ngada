@@ -26,12 +26,11 @@ global_settings = get_global_settings()
 # --- 3. DETEKSI PINTU RAHASIA ---
 jalur_rahasia = st.query_params.get("status") == "set"
 
-# --- 4. CSS KUSTOM (FIX TEKS HITAM PEKAT UNTUK SEMUA DEVICE) ---
+# --- 4. CSS KUSTOM (FIX TEKS HITAM PEKAT & UI PEMKAB) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
     
-    /* Paksa semua teks dasar menjadi Hitam Pekat */
     html, body, [class*="css"], .stMarkdown, p, span, div, label { 
         font-family: 'Inter', sans-serif; 
         color: #000000 !important; 
@@ -40,7 +39,6 @@ st.markdown("""
     .stApp { background-color: #FFFFFF !important; }
     header { background-color: #059669 !important; z-index: 99999 !important; } 
     
-    /* Hero Section tetap Putih teksnya agar kontras dengan Background Hijau */
     .hero-section {
         background: linear-gradient(135deg, #059669 0%, #10B981 100%);
         padding: 40px; border-radius: 20px; 
@@ -63,7 +61,6 @@ st.markdown("""
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     }
     
-    /* Pastikan angka harga dan nama barang hitam pekat */
     .price-main { font-size: 1.5rem; font-weight: 800; color: #000000 !important; }
     .card-container b, .card-container small { color: #000000 !important; }
     
@@ -96,7 +93,8 @@ df_harga, df_berita = load_all_data()
 # --- 6. SIDEBAR ---
 with st.sidebar:
     st.markdown("<br>", unsafe_allow_html=True)
-    if os.path.exists("logo_ngada.png"): st.image("logo_ngada.png", use_container_width=True)
+    if os.path.exists("logo_ngada.png"): 
+        st.image("logo_ngada.png", use_container_width=True)
     st.divider()
     pilihan = st.radio("Menu Layanan Digital:", [
         "🏠 Dashboard Beranda", 
@@ -131,7 +129,19 @@ if not df_harga.empty:
 
         col_foto, col_data = st.columns([1, 2])
         with col_foto:
-            if os.path.exists("IMG_20251125_111048.jpg"): st.image("IMG_20251125_111048.jpg", use_container_width=True, caption="Dokumentasi Pasar")
+            # --- FOTO PIMPINAN DAERAH ---
+            # Pastikan nama file di Github sesuai (misal: pimpinan.jpg)
+            # Anda bisa ganti nama filenya di bawah ini sesuai yang Anda upload
+            nama_file_pimpinan = "IMG_20251125_111048.jpg" # Ganti jika nama filenya berbeda
+            if os.path.exists(nama_file_pimpinan):
+                st.image(nama_file_pimpinan, use_container_width=True, caption="Bupati & Wakil Bupati Ngada")
+            
+            st.divider()
+            
+            # --- FOTO DOKUMENTASI PASAR ---
+            if os.path.exists("IMG_20251125_111048.jpg"): 
+                st.image("IMG_20251125_111048.jpg", use_container_width=True, caption="Dokumentasi Pemantauan Pasar")
+        
         with col_data:
             search = st.text_input("🔍 Cari komoditas...", "")
             df_show = df_harga.copy()
