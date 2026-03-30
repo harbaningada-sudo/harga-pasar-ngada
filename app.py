@@ -65,6 +65,7 @@ st.markdown("""
     
     .price-main { font-size: 1.4rem; font-weight: 800; }
     .price-sub { font-size: 0.95rem; font-weight: 600; color: #475569 !important; }
+    .price-label-top { font-size: 0.75rem; color: #64748B; margin-bottom: 2px; font-weight: 600; }
     .price-box { text-align: right; border-left: 1px solid #EEE; padding-left: 15px; min-width: 140px; }
     </style>
     """, unsafe_allow_html=True)
@@ -79,14 +80,12 @@ def get_img_as_base64(file):
 @st.cache_data(ttl=60)
 def load_all_data():
     try:
-        # Data Harga
         url_h = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR54g3RrvlqqZ3ppTrKiKK-L1fVT8YSvnXfihtO-H795s0KQ6H_TewZLFFAXPi-ktMizomg3JHdIIjI/pub?gid=929993273&single=true&output=csv"
         df_h = pd.read_csv(url_h, skiprows=1)
         df_h = df_h.iloc[:, [0, 1, 2, 3, 4, 5]]
         df_h.columns = ['KOMODITAS', 'SATUAN', 'BESAR_KMRN', 'BESAR_INI', 'KECIL_KMRN', 'KECIL_INI']
         df_h = df_h.dropna(subset=['KOMODITAS'])
 
-        # Data Berita
         url_b = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT2LMrwn5xk782uKyRGkeOzCXt3DDK-iBxe_F8RUkI7Zk4iYgMVcE_f0XbSc8R72Q/pub?gid=201409714&single=true&output=csv"
         df_b = pd.read_csv(url_b, skiprows=2)
         df_b.columns = ["No", "Kegiatan", "Tipe", "Link", "Tanggal"]
@@ -117,7 +116,7 @@ with st.sidebar:
         "🏠 Dashboard", "📈 Tren Harga", "📰 Media & Berita", "📥 Pusat Unduhan", "ℹ️ Komitmen ASN"
     ])
 
-# --- 7. LOGIKA TAMPILAN ---
+# --- 7. TAMPILAN DASHBOARD ---
 if not df_harga.empty:
     if pilihan == "🏠 Dashboard":
         st.markdown(f'<div class="hero-section"><h1>{global_settings["hero_title"]}</h1><p>{global_settings["hero_subtitle"]}</p></div>', unsafe_allow_html=True)
@@ -159,10 +158,11 @@ if not df_harga.empty:
                             <small>Satuan: {row["SATUAN"]}</small>
                         </div>
                         <div class="price-box">
-                            <small style="color: #64748B;">Pedagang Besar</small><br>
+                            <div class="price-label-top">Pedagang Besar</div>
                             <span class="price-sub">Rp {b_ini:,}</span>
                         </div>
                         <div class="price-box">
+                            <div class="price-label-top" style="color:{warna};">Pedagang Kecil</div>
                             <div style="color:{warna}; font-size:0.75rem; font-weight:800;">{ikon} {status}</div>
                             <div class="price-main" style="color:{warna};">Rp {k_ini:,}</div>
                             <small style="color: #64748B;">Kemarin: Rp {k_kmrn:,}</small>
@@ -185,9 +185,8 @@ if not df_harga.empty:
             df_p = df_v[df_v['KOMODITAS'].isin(global_settings["pilihan_admin"])]
             df_m = df_p.melt(id_vars=['KOMODITAS'], value_vars=['KECIL_KMRN', 'KECIL_INI'], var_name='Waktu', value_name='Harga')
             st.plotly_chart(px.bar(df_m, x="KOMODITAS", y="Harga", color="Waktu", barmode="group", color_discrete_map={'KECIL_KMRN': '#94A3B8', 'KECIL_INI': '#059669'}), use_container_width=True)
-        else:
-            st.info("💡 Belum ada data tren yang dipilih oleh Admin.")
 
+    # Menu lain tetap ada di bawah...
     elif pilihan == "📰 Media & Berita":
         st.title("📰 Media & Berita")
         for _, row in df_berita.iloc[::-1].iterrows():
