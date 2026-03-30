@@ -26,7 +26,7 @@ global_settings = get_global_settings()
 # --- 3. DETEKSI PINTU RAHASIA ---
 jalur_rahasia = st.query_params.get("status") == "set"
 
-# --- 4. CSS KUSTOM (FIX TEKS HITAM PEKAT & UI PEMKAB) ---
+# --- 4. CSS KUSTOM (TEKS HITAM PEKAT & UI PEMKAB) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
@@ -129,12 +129,10 @@ if not df_harga.empty:
 
         col_foto, col_data = st.columns([1, 2])
         with col_foto:
-            # --- FOTO PIMPINAN DAERAH ---
-            # Pastikan nama file di Github sesuai (misal: pimpinan.jpg)
-            # Anda bisa ganti nama filenya di bawah ini sesuai yang Anda upload
-            nama_file_pimpinan = "IMG_20251125_111048.jpg" # Ganti jika nama filenya berbeda
-            if os.path.exists(nama_file_pimpinan):
-                st.image(nama_file_pimpinan, use_container_width=True, caption="Bupati & Wakil Bupati Ngada")
+            # --- FOTO PIMPINAN DAERAH (Sesuai nama file di GitHub Anda) ---
+            file_pimpinan = "Bupati-dan-Wakil-Bupati-Ngada-jpg.jpeg"
+            if os.path.exists(file_pimpinan):
+                st.image(file_pimpinan, use_container_width=True, caption="Pimpinan Daerah Kabupaten Ngada")
             
             st.divider()
             
