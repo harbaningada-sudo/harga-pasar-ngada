@@ -25,7 +25,7 @@ def get_global_settings():
 global_settings = get_global_settings()
 is_admin = st.query_params.get("status") == "set"
 
-# --- 3. CSS KUSTOM (FULL UI) ---
+# --- 3. CSS KUSTOM ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
@@ -116,77 +116,98 @@ with st.sidebar:
         "🏠 Dashboard", "📈 Tren Harga", "📰 Media & Berita", "📥 Pusat Unduhan", "ℹ️ Komitmen ASN"
     ])
 
-# --- 7. TAMPILAN DASHBOARD ---
+# --- 7. TAMPILAN UTAMA ---
 if not df_harga.empty:
     if pilihan == "🏠 Dashboard":
+        # Hero Section
         st.markdown(f'<div class="hero-section"><h1>{global_settings["hero_title"]}</h1><p>{global_settings["hero_subtitle"]}</p></div>', unsafe_allow_html=True)
         
+        # Admin Editor
         if is_admin:
             with st.expander("🛠️ PANEL ADMIN: EDIT DASHBOARD"):
                 global_settings["hero_title"] = st.text_input("Judul:", value=global_settings["hero_title"])
                 global_settings["hero_subtitle"] = st.text_area("Sub-judul:", value=global_settings["hero_subtitle"])
                 if st.button("💾 Simpan Perubahan"): st.rerun()
 
-        search = st.text_input("🔍 Cari komoditas...", "")
-        df_show = df_harga.copy()
-        if search: df_show = df_show[df_show['KOMODITAS'].str.contains(search, case=False, na=False)]
+        # Layout Utama: 2 Kolom (Kiri: Foto, Kanan: Data)
+        col_foto, col_data = st.columns([1, 2.3])
         
-        for _, row in df_show.iterrows():
-            if pd.isna(row['SATUAN']) or str(row['SATUAN']).strip() == "":
-                st.markdown(f'<div class="group-header">📂 {row["KOMODITAS"]}</div>', unsafe_allow_html=True)
-                continue
+        with col_foto:
+            # MEMASUKKAN FOTO DOKUMENTASI OPERASI PASAR
+            file_foto_pasar = "IMG_20251125_111048.jpg"
+            if os.path.exists(file_foto_pasar):
+                st.image(file_foto_pasar, use_container_width=True, caption="Dokumentasi Pemantauan Pasar")
+            else:
+                st.info("💡 Foto dokumentasi belum diunggah.")
             
-            try:
-                k_ini = int(pd.to_numeric(row['KECIL_INI'], errors='coerce') or 0)
-                k_kmrn = int(pd.to_numeric(row['KECIL_KMRN'], errors='coerce') or 0)
-                b_ini = int(pd.to_numeric(row['BESAR_INI'], errors='coerce') or 0)
-                sel = k_ini - k_kmrn
+            st.divider()
+            # Bisa ditambahkan info tambahan di kolom kiri jika perlu
+            st.markdown("""
+                <div style="background:#F1F5F9; padding:15px; border-radius:10px;">
+                <small><b>Informasi:</b><br>Data diperbarui setiap hari kerja berdasarkan pantauan langsung di pasar-pasar utama Kabupaten Ngada.</small>
+                </div>
+            """, unsafe_allow_html=True)
+        
+        with col_data:
+            search = st.text_input("🔍 Cari komoditas...", "")
+            df_show = df_harga.copy()
+            if search: df_show = df_show[df_show['KOMODITAS'].str.contains(search, case=False, na=False)]
+            
+            for _, row in df_show.iterrows():
+                # Header Kategori
+                if pd.isna(row['SATUAN']) or str(row['SATUAN']).strip() == "":
+                    st.markdown(f'<div class="group-header">📂 {row["KOMODITAS"]}</div>', unsafe_allow_html=True)
+                    continue
                 
-                # Warna Berdasarkan Status
-                if sel > 0:
-                    warna, ikon, status = "#DC2626", "🔺", f"NAIK Rp {abs(sel):,}"
-                elif sel < 0:
-                    warna, ikon, status = "#059669", "🔻", f"TURUN Rp {abs(sel):,}"
-                else:
-                    warna, ikon, status = "#94A3B8", "➖", "STABIL"
+                try:
+                    k_ini = int(pd.to_numeric(row['KECIL_INI'], errors='coerce') or 0)
+                    k_kmrn = int(pd.to_numeric(row['KECIL_KMRN'], errors='coerce') or 0)
+                    b_ini = int(pd.to_numeric(row['BESAR_INI'], errors='coerce') or 0)
+                    sel = k_ini - k_kmrn
+                    
+                    if sel > 0:
+                        warna, ikon, status = "#DC2626", "🔺", f"NAIK Rp {abs(sel):,}"
+                    elif sel < 0:
+                        warna, ikon, status = "#059669", "🔻", f"TURUN Rp {abs(sel):,}"
+                    else:
+                        warna, ikon, status = "#94A3B8", "➖", "STABIL"
 
-                st.markdown(f"""
-                <div class="card-container" style="border-left: 10px solid {warna};">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div style="flex: 2;">
-                            <b style="font-size:1.15rem;">{row["KOMODITAS"]}</b><br>
-                            <small>Satuan: {row["SATUAN"]}</small>
-                        </div>
-                        <div class="price-box">
-                            <div class="price-label-top">Pedagang Besar</div>
-                            <span class="price-sub">Rp {b_ini:,}</span>
-                        </div>
-                        <div class="price-box">
-                            <div class="price-label-top" style="color:{warna};">Pedagang Kecil</div>
-                            <div style="color:{warna}; font-size:0.75rem; font-weight:800;">{ikon} {status}</div>
-                            <div class="price-main" style="color:{warna};">Rp {k_ini:,}</div>
-                            <small style="color: #64748B;">Kemarin: Rp {k_kmrn:,}</small>
+                    st.markdown(f"""
+                    <div class="card-container" style="border-left: 10px solid {warna};">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div style="flex: 2;">
+                                <b style="font-size:1.15rem;">{row["KOMODITAS"]}</b><br>
+                                <small>Satuan: {row["SATUAN"]}</small>
+                            </div>
+                            <div class="price-box">
+                                <div class="price-label-top">Pedagang Besar</div>
+                                <span class="price-sub">Rp {b_ini:,}</span>
+                            </div>
+                            <div class="price-box">
+                                <div class="price-label-top" style="color:{warna};">Pedagang Kecil</div>
+                                <div style="color:{warna}; font-size:0.75rem; font-weight:800;">{ikon} {status}</div>
+                                <div class="price-main" style="color:{warna};">Rp {k_ini:,}</div>
+                                <small style="color: #64748B;">Kemarin: Rp {k_kmrn:,}</small>
+                            </div>
                         </div>
                     </div>
-                </div>
-                """, unsafe_allow_html=True)
-            except: continue
+                    """, unsafe_allow_html=True)
+                except: continue
 
     elif pilihan == "📈 Tren Harga":
-        st.title("📈 Tren Harga Komoditas")
+        st.title("📈 Tren Harga")
+        # Logika tren tetap berfungsi
         df_v = df_harga.dropna(subset=['SATUAN'])
         if is_admin:
             pilihan_baru = st.multiselect("Pilih komoditas publik:", options=df_v['KOMODITAS'].unique(), default=[x for x in global_settings["pilihan_admin"] if x in df_v['KOMODITAS'].unique()])
-            if st.button("🚀 Publikasikan Tren"):
-                global_settings["pilihan_admin"] = pilihan_baru
-                st.success("Tren diperbarui!"); st.rerun()
+            if st.button("🚀 Publikasikan"):
+                global_settings["pilihan_admin"] = pilihan_baru; st.rerun()
         
         if global_settings["pilihan_admin"]:
             df_p = df_v[df_v['KOMODITAS'].isin(global_settings["pilihan_admin"])]
             df_m = df_p.melt(id_vars=['KOMODITAS'], value_vars=['KECIL_KMRN', 'KECIL_INI'], var_name='Waktu', value_name='Harga')
             st.plotly_chart(px.bar(df_m, x="KOMODITAS", y="Harga", color="Waktu", barmode="group", color_discrete_map={'KECIL_KMRN': '#94A3B8', 'KECIL_INI': '#059669'}), use_container_width=True)
 
-    # Menu lain tetap ada di bawah...
     elif pilihan == "📰 Media & Berita":
         st.title("📰 Media & Berita")
         for _, row in df_berita.iloc[::-1].iterrows():
