@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import os
+import base64
 
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(
@@ -11,7 +12,7 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# --- 2. LOGIKA MEMORI PUBLIK ---
+# --- 2. LOGIKA MEMORI PUBLIK (GLOBAL CACHE) ---
 @st.cache_resource
 def get_global_settings():
     return {
@@ -24,7 +25,7 @@ def get_global_settings():
 global_settings = get_global_settings()
 jalur_rahasia = st.query_params.get("status") == "set"
 
-# --- 3. CSS KUSTOM (LOGO DI ATAS FOTO PIMPINAN) ---
+# --- 3. CSS KUSTOM (TEKS HITAM & SIDEBAR MEWAH) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
@@ -36,44 +37,30 @@ st.markdown("""
     .stApp { background-color: #FFFFFF !important; }
     header { background-color: #059669 !important; }
 
-    /* Container khusus Sidebar Header */
-    .sidebar-header-container {
+    /* Header Sidebar dengan Background Foto */
+    .sidebar-header-box {
         position: relative;
         width: 100%;
-        height: 250px;
-        border-radius: 0 0 20px 20px;
+        height: 220px;
+        border-radius: 15px;
         overflow: hidden;
         margin-bottom: 20px;
-        display: flex;
-        flex-direction: column;
-        justify-content: flex-end;
-        padding: 15px;
     }
-
-    .bg-foto {
+    .bg-pimpinan {
+        width: 100%; height: 100%; object-fit: cover;
+        position: absolute; top: 0; left: 0; z-index: 1;
+    }
+    .overlay-info {
         position: absolute;
-        top: 0; left: 0; width: 100%; height: 100%;
-        object-fit: cover;
-        z-index: 1;
-        opacity: 0.8; /* Agar background tidak terlalu terang */
+        bottom: 10px; left: 10px; z-index: 2;
+        background: rgba(255, 255, 255, 0.9);
+        padding: 8px; border-radius: 8px;
+        border: 1px solid #059669;
+        max-width: 90%;
     }
-
-    .overlay-content {
-        position: relative;
-        z-index: 2;
-        background: rgba(255, 255, 255, 0.85); /* Kotak putih transparan di pojok */
-        padding: 10px;
-        border-radius: 10px;
-        width: fit-content;
-        border: 1px solid rgba(5, 150, 105, 0.3);
-    }
-
-    .sidebar-dept-text {
-        font-size: 0.75rem;
-        font-weight: 800;
-        color: #059669 !important;
-        line-height: 1.2;
-        margin-top: 5px;
+    .dept-name {
+        font-size: 0.7rem; font-weight: 800; color: #059669 !important;
+        line-height: 1.2; margin-top: 4px;
     }
 
     .hero-section {
@@ -92,12 +79,20 @@ st.markdown("""
         border: 1px solid #E2E8F0; margin-bottom: 10px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     }
-    
-    .price-main { font-size: 1.4rem; font-weight: 800; }
+    .price-main { font-size: 1.4rem; font-weight: 800; color: #000000 !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. DATA LOADING ---
+# --- 4. FUNGSI PEMBANTU (IMAGE TO BASE64) ---
+def get_img_as_base64(file):
+    try:
+        with open(file, "rb") as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    except:
+        return ""
+
+# --- 5. MUAT DATA ---
 @st.cache_data(ttl=60)
 def load_all_data():
     try:
@@ -119,42 +114,21 @@ def load_all_data():
 
 df_harga, df_berita = load_all_data()
 
-# --- 5. SIDEBAR DENGAN BACKGROUND FOTO ---
+# --- 6. SIDEBAR ---
 with st.sidebar:
-    # Header Sidebar: Foto Bupati sebagai background, Logo & Teks di pojok kiri bawah foto
-    file_pimpinan = "Bupati-dan-Wakil-Bupati-Ngada-jpg.jpeg"
-    logo_file = "logo_ngada.png"
+    # Tampilan Header Sidebar Mewah
+    img_pimpinan = get_img_as_base64("Bupati-dan-Wakil-Bupati-Ngada-jpg.jpeg")
+    img_logo = get_img_as_base64("logo_ngada.png")
     
-    # Logika HTML untuk Sidebar Header
-    header_html = f"""
-    <div class="sidebar-header-container">
-        <img src="https://raw.githubusercontent.com/{os.environ.get('GITHUB_REPOSITORY', 'username/repo')}/main/{file_pimpinan}" class="bg-foto">
-        <div class="overlay-content">
-            <img src="https://raw.githubusercontent.com/{os.environ.get('GITHUB_REPOSITORY', 'username/repo')}/main/{logo_file}" width="50">
-            <div class="sidebar-dept-text">
-                Bagian Perekonomian dan SDA<br>Setda Kab. Ngada
-            </div>
+    st.markdown(f"""
+    <div class="sidebar-header-box">
+        <img src="data:image/jpeg;base64,{img_pimpinan}" class="bg-pimpinan">
+        <div class="overlay-info">
+            <img src="data:image/png;base64,{img_logo}" width="40">
+            <div class="dept-name">Bagian Perekonomian dan SDA<br>Setda Kab. Ngada</div>
         </div>
     </div>
-    """
-    # Jika dijalankan lokal/tanpa env github, gunakan file lokal
-    if os.path.exists(file_pimpinan) and os.path.exists(logo_file):
-        import base64
-        def get_base64(path):
-            with open(path, "rb") as f: return base64.b64encode(f.read()).decode()
-        
-        header_html = f"""
-        <div class="sidebar-header-container">
-            <img src="data:image/jpeg;base64,{get_base64(file_pimpinan)}" class="bg-foto">
-            <div class="overlay-content">
-                <img src="data:image/png;base64,{get_base64(logo_file)}" width="40">
-                <div class="sidebar-dept-text">
-                    Bagian Perekonomian dan SDA<br>Setda Kab. Ngada
-                </div>
-            </div>
-        </div>
-        """
-    st.markdown(header_html, unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
     pilihan = st.radio("Menu Layanan Digital:", [
         "🏠 Dashboard Beranda", "📈 Tren Harga Komoditas", "📰 Media & Berita", "📥 Pusat Unduhan", "ℹ️ Komitmen Smart ASN"
@@ -162,20 +136,31 @@ with st.sidebar:
     
     is_admin = False
     if jalur_rahasia:
-        pass_input = st.text_input("🔑 Petugas", type="password")
+        st.divider()
+        pass_input = st.text_input("🔑 Verifikasi Petugas", type="password")
         if pass_input == "ngada2026":
             is_admin = True
-            st.success("Admin Aktif")
+            st.success("Akses Admin Aktif!")
 
-# --- 6. KONTEN UTAMA ---
+# --- 7. LOGIKA TAMPILAN UTAMA ---
 if not df_harga.empty:
     if pilihan == "🏠 Dashboard Beranda":
         st.markdown(f'<div class="hero-section"><h1>{global_settings["hero_title"]}</h1><p>{global_settings["hero_subtitle"]}</p></div>', unsafe_allow_html=True)
         
+        if is_admin:
+            with st.expander("📝 Edit Tulisan Dashboard"):
+                new_title = st.text_input("Ganti Judul Besar:", value=global_settings["hero_title"])
+                new_sub = st.text_area("Ganti Sub-judul:", value=global_settings["hero_subtitle"])
+                if st.button("Simpan Perubahan Dashboard"):
+                    global_settings["hero_title"] = new_title
+                    global_settings["hero_subtitle"] = new_sub
+                    st.success("Berhasil diperbarui!")
+                    st.rerun()
+
         col_foto, col_data = st.columns([1, 2])
         with col_foto:
             if os.path.exists("IMG_20251125_111048.jpg"): 
-                st.image("IMG_20251125_111048.jpg", use_container_width=True, caption="Dokumentasi Pasar")
+                st.image("IMG_20251125_111048.jpg", use_container_width=True, caption="Dokumentasi Pemantauan Pasar")
         
         with col_data:
             search = st.text_input("🔍 Cari komoditas...", "")
@@ -197,10 +182,53 @@ if not df_harga.empty:
                 except: continue
 
     elif pilihan == "📈 Tren Harga Komoditas":
-        st.title("📈 Tren Harga")
-        # Logika tren tetap sama seperti sebelumnya...
-        st.info("Pilih komoditas di panel admin untuk melihat tren.")
+        st.title("📈 Tren Harga Terpilih")
+        df_valid = df_harga.dropna(subset=['SATUAN'])
+        list_komoditas = df_valid['KOMODITAS'].unique().tolist()
+        
+        if is_admin:
+            st.warning("⚙️ MODE PENGATURAN TREN")
+            safe_defaults = [x for x in global_settings["pilihan_admin"] if x in list_komoditas]
+            pilihan_baru = st.multiselect("Pilih komoditas untuk publik:", options=list_komoditas, default=safe_defaults)
+            if st.button("🚀 Publikasikan ke Semua Device"):
+                global_settings["pilihan_admin"] = pilihan_baru
+                st.success("Tren berhasil diperbarui!")
+                st.rerun()
+        
+        pilihan_final = global_settings["pilihan_admin"]
+        if pilihan_final:
+            pilihan_final = [x for x in pilihan_final if x in list_komoditas]
+            if pilihan_final:
+                df_plot = df_valid[df_valid['KOMODITAS'].isin(pilihan_final)].melt(id_vars=['KOMODITAS'], value_vars=['HARGA KEMARIN', 'HARGA HARI INI'], var_name='Waktu', value_name='Harga (Rp)')
+                fig = px.bar(df_plot, x="KOMODITAS", y="Harga (Rp)", color="Waktu", barmode="group", text_auto='.2s', color_discrete_map={'HARGA KEMARIN': '#94A3B8', 'HARGA HARI INI': '#059669'})
+                st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("💡 Belum ada data tren yang dipublikasikan oleh Admin.")
 
-    # Menu lain tetap sama...
+    elif pilihan == "📰 Media & Berita":
+        st.title("📰 Media & Berita")
+        for _, row in df_berita.iloc[::-1].iterrows():
+            st.markdown(f'<div class="card-container"><h3>{row["Kegiatan"]}</h3><p>📅 {row["Tanggal"]}</p></div>', unsafe_allow_html=True)
+            link = str(row['Link'])
+            if link.startswith("http"):
+                if any(ext in link.lower() for ext in ['.jpg', '.png', '.jpeg']): st.image(link, use_container_width=True)
+                st.markdown(f'<a href="{link}" target="_blank" style="text-decoration:none; color:#4F46E5; font-weight:bold; padding:10px; background:#EEF2FF; border-radius:8px;">📂 Lihat Detail</a>', unsafe_allow_html=True)
+
+    elif pilihan == "📥 Pusat Unduhan":
+        st.title("📥 Pusat Unduhan")
+        col1, col2 = st.columns(2)
+        with col1: st.download_button("Unduh CSV Harga", df_harga.to_csv(index=False).encode('utf-8'), "Harga_Ngada.csv", "text/csv", use_container_width=True)
+        with col2: st.download_button("Unduh CSV Berita", df_berita.to_csv(index=False).encode('utf-8'), "Media_Ngada.csv", "text/csv", use_container_width=True)
+
+    elif pilihan == "ℹ️ Komitmen Smart ASN":
+        st.title("ℹ️ Komitmen Smart ASN")
+        st.markdown(f'<div class="card-container"><h3>Transparansi & Akuntabilitas</h3><p>{global_settings["about_text"]}</p></div>', unsafe_allow_html=True)
+        if is_admin:
+            with st.expander("📝 Edit Penjelasan Tentang Kami"):
+                new_about = st.text_area("Ganti Isi Komitmen:", value=global_settings["about_text"])
+                if st.button("Simpan Perubahan Komitmen"):
+                    global_settings["about_text"] = new_about
+                    st.success("Teks komitmen berhasil diperbarui!")
+                    st.rerun()
 else:
-    st.error("Gagal muat data.")
+    st.error("⚠️ Gagal memuat data.")
