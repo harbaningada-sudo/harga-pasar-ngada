@@ -4,100 +4,231 @@ import plotly.express as px
 import os
 import base64
 
-# --- 1. SETTING HALAMAN ---
-st.set_page_config(page_title="Ekonomi Digital Ngada", page_icon="🏛️", layout="wide")
+# --- 1. KONFIGURASI HALAMAN ---
+st.set_page_config(
+    page_title="Portal Ekonomi Digital Ngada", 
+    page_icon="🏛️", 
+    layout="wide",
+    initial_sidebar_state="auto"
+)
 
-# --- 2. CSS BIAR TULISAN HITAM PEKAT ---
+# --- 2. LOGIKA MEMORI PUBLIK (GLOBAL CACHE) ---
+@st.cache_resource
+def get_global_settings():
+    return {
+        "pilihan_admin": [],
+        "hero_title": "Smart Economy Ngada 👋",
+        "hero_subtitle": "Pelayanan transparan terhadap harga komoditas bagi masyarakat Ngada.",
+        "about_text": "Inovasi digital ini menjamin masyarakat mendapatkan akses informasi harga yang jujur dan akurat langsung dari sumbernya."
+    }
+
+global_settings = get_global_settings()
+jalur_rahasia = st.query_params.get("status") == "set"
+
+# --- 3. CSS KUSTOM (TEKS HITAM & SIDEBAR MEWAH) ---
 st.markdown("""
     <style>
-    html, body, [class*="css"], .stMarkdown, p, span, div, label { color: #000000 !important; font-family: 'Inter', sans-serif; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+    
+    html, body, [class*="css"], .stMarkdown, p, span, div, label { 
+        font-family: 'Inter', sans-serif; color: #000000 !important; 
+    }
+    
     .stApp { background-color: #FFFFFF !important; }
-    .hero-section { background: linear-gradient(135deg, #059669 0%, #10B981 100%); padding: 30px; border-radius: 15px; margin-bottom: 20px; color: white !important; }
-    .card-container { background: white !important; padding: 15px; border-radius: 12px; border: 1px solid #E2E8F0; margin-bottom: 10px; border-left: 10px solid #059669; }
+    header { background-color: #059669 !important; }
+
+    /* Header Sidebar dengan Background Foto */
+    .sidebar-header-box {
+        position: relative;
+        width: 100%;
+        height: 220px;
+        border-radius: 15px;
+        overflow: hidden;
+        margin-bottom: 20px;
+    }
+    .bg-pimpinan {
+        width: 100%; height: 100%; object-fit: cover;
+        position: absolute; top: 0; left: 0; z-index: 1;
+    }
+    .overlay-info {
+        position: absolute;
+        bottom: 10px; left: 10px; z-index: 2;
+        background: rgba(255, 255, 255, 0.9);
+        padding: 8px; border-radius: 8px;
+        border: 1px solid #059669;
+        max-width: 90%;
+    }
+    .dept-name {
+        font-size: 0.7rem; font-weight: 800; color: #059669 !important;
+        line-height: 1.2; margin-top: 4px;
+    }
+
+    .hero-section {
+        background: linear-gradient(135deg, #059669 0%, #10B981 100%);
+        padding: 40px; border-radius: 20px; margin-bottom: 25px;
+    }
+    .hero-section h1, .hero-section p { color: #FFFFFF !important; }
+
+    .group-header {
+        background: #F1F5F9 !important; padding: 12px 20px; border-radius: 10px;
+        margin-top: 25px; font-weight: 800; border-left: 10px solid #059669;
+    }
+
+    .card-container {
+        background: white !important; padding: 20px; border-radius: 15px;
+        border: 1px solid #E2E8F0; margin-bottom: 10px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+    .price-main { font-size: 1.4rem; font-weight: 800; color: #000000 !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. FUNGSI AMBIL DATA (VERSI ANTI-ERROR) ---
-@st.cache_data(ttl=10) # Cache diset sebentar saja biar cepat update
-def load_data():
+# --- 4. FUNGSI PEMBANTU (IMAGE TO BASE64) ---
+def get_img_as_base64(file):
     try:
-        # Link CSV Bapak
-        URL_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCUaMJFl1dD_iZR9R7QE7dV5S-VlbwU_SUcS5wbzRlyOflTcRg18fiOvu29f4Zd1RMw-WCbwRFo-m2/pub?gid=659700295&single=true&output=csv"
-        
-        # Baca data langsung tanpa skip dulu untuk tes
-        df = pd.read_csv(URL_CSV)
-        
-        # Kita ambil data mulai dari baris yang ada tulisan "Beras" (biasanya baris ke-7 atau index ke-6)
-        # Kita bersihkan data agar mulai dari baris ke-7
-        df_clean = df.iloc[5:].copy() 
-        
-        # Ambil kolom A (0), C (2), D (3), E (4), F (5), G (6)
-        df_final = df_clean.iloc[:, [0, 2, 3, 4, 5, 6]]
-        df_final.columns = ['KOMODITAS', 'SATUAN', 'B_KMRN', 'B_INI', 'K_KMRN', 'K_INI']
-        
-        # Hapus baris kosong
-        df_final = df_final.dropna(subset=['KOMODITAS'])
+        with open(file, "rb") as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    except:
+        return ""
 
-        # Bersihkan Karakter Titik/Koma agar bisa dihitung
-        for col in ['B_KMRN', 'B_INI', 'K_KMRN', 'K_INI']:
-            df_final[col] = df_final[col].astype(str).str.replace('.', '', regex=False).str.replace(',', '', regex=False).str.replace('-', '0').str.strip()
-            df_final[col] = pd.to_numeric(df_final[col], errors='coerce').fillna(0)
-            
-        return df_final
-    except Exception as e:
-        st.error(f"Pesan Error Teknis: {e}") # Ini akan memunculkan error aslinya kalau gagal
-        return None
-
-df = load_data()
-
-# --- 4. SIDEBAR ---
-def get_base64(file):
+# --- 5. MUAT DATA ---
+@st.cache_data(ttl=60)
+def load_all_data():
     try:
-        with open(file, "rb") as f: return base64.b64encode(f.read()).decode()
-    except: return ""
+        url_h = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR54g3RrvlqqZ3ppTrKiKK-L1fVT8YSvnXfihtO-H795s0KQ6H_TewZLFFAXPi-ktMizomg3JHdIIjI/pub?gid=929993273&single=true&output=csv"
+        df_h = pd.read_csv(url_h)
+        current_cat = "LAIN-LAIN"
+        categories = []
+        for i, row in df_h.iterrows():
+            if pd.isna(row['SATUAN']) or str(row['SATUAN']).strip() == "":
+                current_cat = str(row['KOMODITAS']).upper()
+            categories.append(current_cat)
+        df_h['KATEGORI_INDUK'] = categories
+        url_b = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT2LMrwn5xk782uKyRGkeOzCXt3DDK-iBxe_F8RUkI7Zk4iYgMVcE_f0XbSc8R72Q/pub?gid=201409714&single=true&output=csv"
+        df_b = pd.read_csv(url_b, skiprows=2)
+        df_b.columns = ["No", "Kegiatan", "Tipe", "Link", "Tanggal"]
+        return df_h, df_b.dropna(subset=['Kegiatan']).fillna("")
+    except:
+        return pd.DataFrame(), pd.DataFrame()
 
+df_harga, df_berita = load_all_data()
+
+# --- 6. SIDEBAR ---
 with st.sidebar:
-    img_p = get_base64("Bupati-dan-Wakil-Bupati-Ngada-jpg.jpeg")
-    img_l = get_base64("logo_ngada.png")
+    # Tampilan Header Sidebar Mewah
+    img_pimpinan = get_img_as_base64("Bupati-dan-Wakil-Bupati-Ngada-jpg.jpeg")
+    img_logo = get_img_as_base64("logo_ngada.png")
+    
     st.markdown(f"""
-        <div style="background:url(data:image/jpeg;base64,{img_p}); background-size:cover; height:180px; border-radius:15px; position:relative; margin-bottom:15px;">
-            <div style="position:absolute; bottom:5px; left:5px; background:rgba(255,255,255,0.9); padding:5px; border-radius:8px; border:1px solid #059669;">
-                <img src="data:image/png;base64,{img_l}" width="25"><br>
-                <b style="font-size:0.55rem; color:#059669;">Bagian Perekonomian & SDA</b>
-            </div>
+    <div class="sidebar-header-box">
+        <img src="data:image/jpeg;base64,{img_pimpinan}" class="bg-pimpinan">
+        <div class="overlay-info">
+            <img src="data:image/png;base64,{img_logo}" width="40">
+            <div class="dept-name">Bagian Perekonomian dan SDA<br>Setda Kab. Ngada</div>
         </div>
+    </div>
     """, unsafe_allow_html=True)
-    menu = st.radio("Menu:", ["🏠 Dashboard Utama", "📈 Tren Harga"])
 
-# --- 5. TAMPILAN ---
-if df is not None and not df.empty:
-    if menu == "🏠 Dashboard Utama":
-        st.markdown('<div class="hero-section"><h1>Smart Economy Ngada 👋</h1><p>Data harga pasar terbaru Kabupaten Ngada.</p></div>', unsafe_allow_html=True)
+    pilihan = st.radio("Menu Layanan Digital:", [
+        "🏠 Dashboard Beranda", "📈 Tren Harga Komoditas", "📰 Media & Berita", "📥 Pusat Unduhan", "ℹ️ Komitmen Smart ASN"
+    ])
+    
+    is_admin = False
+    if jalur_rahasia:
+        st.divider()
+        pass_input = st.text_input("🔑 Verifikasi Petugas", type="password")
+        if pass_input == "ngada2026":
+            is_admin = True
+            st.success("Akses Admin Aktif!")
+
+# --- 7. LOGIKA TAMPILAN UTAMA ---
+if not df_harga.empty:
+    if pilihan == "🏠 Dashboard Beranda":
+        st.markdown(f'<div class="hero-section"><h1>{global_settings["hero_title"]}</h1><p>{global_settings["hero_subtitle"]}</p></div>', unsafe_allow_html=True)
         
-        for _, row in df.iterrows():
-            # Logika Kategori: Jika Satuan kosong atau berupa angka aneh
-            if pd.isna(row['SATUAN']) or str(row['SATUAN']).strip() in ["", "0", "3", "SATUAN"]:
-                st.markdown(f"<h3 style='border-bottom:3px solid #059669; margin-top:30px; color:#059669;'>📂 {row['KOMODITAS']}</h3>", unsafe_allow_html=True)
-            else:
-                selisih = row['K_INI'] - row['K_KMRN']
-                if selisih > 0:
-                    status = f"<span style='color:red;'>🔺 Naik Rp {selisih:,.0f}</span>"
-                elif selisih < 0:
-                    status = f"<span style='color:green;'>🔻 Turun Rp {abs(selisih):,.0f}</span>"
-                else:
-                    status = "<span style='color:gray;'>➖ Stabil</span>"
+        if is_admin:
+            with st.expander("📝 Edit Tulisan Dashboard"):
+                new_title = st.text_input("Ganti Judul Besar:", value=global_settings["hero_title"])
+                new_sub = st.text_area("Ganti Sub-judul:", value=global_settings["hero_subtitle"])
+                if st.button("Simpan Perubahan Dashboard"):
+                    global_settings["hero_title"] = new_title
+                    global_settings["hero_subtitle"] = new_sub
+                    st.success("Berhasil diperbarui!")
+                    st.rerun()
 
-                st.markdown(f"""
-                <div class="card-container">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <div><b>{row['KOMODITAS']}</b><br><small>Satuan: {row['SATUAN']}</small></div>
-                        <div style="text-align:right;">
-                            {status}<br>
-                            <span style="font-size:1.2rem; font-weight:800;">Rp {row['K_INI']:,.0f}</span><br>
-                            <small style="color:gray;">Besar: Rp {row['B_INI']:,.0f}</small>
-                        </div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+        col_foto, col_data = st.columns([1, 2])
+        with col_foto:
+            if os.path.exists("IMG_20251125_111048.jpg"): 
+                st.image("IMG_20251125_111048.jpg", use_container_width=True, caption="Dokumentasi Pemantauan Pasar")
+        
+        with col_data:
+            search = st.text_input("🔍 Cari komoditas...", "")
+            df_show = df_harga.copy()
+            if search: df_show = df_show[df_show['KOMODITAS'].str.contains(search, case=False, na=False)]
+            last_header = ""
+            for _, row in df_show.iterrows():
+                if row['KATEGORI_INDUK'] != last_header:
+                    st.markdown(f'<div class="group-header">📂 {row["KATEGORI_INDUK"]}</div>', unsafe_allow_html=True)
+                    last_header = row['KATEGORI_INDUK']
+                if pd.isna(row['SATUAN']) or str(row['SATUAN']).strip() == "": continue
+                try:
+                    h_ini = int(pd.to_numeric(row['HARGA HARI INI'], errors='coerce') or 0)
+                    h_kmrn = int(pd.to_numeric(row['HARGA KEMARIN'], errors='coerce') or 0)
+                    selisih = h_ini - h_kmrn
+                    warna = "#DC2626" if selisih > 0 else "#059669" if selisih < 0 else "#94A3B8"
+                    ikon = "🔺" if selisih > 0 else "🔻" if selisih < 0 else "➖"
+                    st.markdown(f'<div class="card-container" style="border-left: 10px solid {warna};"><div style="display: flex; justify-content: space-between; align-items: center;"><div><b>{row["KOMODITAS"]}</b><br><small>Satuan: {row["SATUAN"]}</small></div><div style="text-align: right;"><span class="price-main">Rp {h_ini:,}</span><br><span style="color: {warna}; font-weight: 700;">{ikon} Rp {abs(selisih):,}</span><br><small style="color: #000000;">Kemarin: Rp {h_kmrn:,}</small></div></div></div>', unsafe_allow_html=True)
+                except: continue
+
+    elif pilihan == "📈 Tren Harga Komoditas":
+        st.title("📈 Tren Harga Terpilih")
+        df_valid = df_harga.dropna(subset=['SATUAN'])
+        list_komoditas = df_valid['KOMODITAS'].unique().tolist()
+        
+        if is_admin:
+            st.warning("⚙️ MODE PENGATURAN TREN")
+            safe_defaults = [x for x in global_settings["pilihan_admin"] if x in list_komoditas]
+            pilihan_baru = st.multiselect("Pilih komoditas untuk publik:", options=list_komoditas, default=safe_defaults)
+            if st.button("🚀 Publikasikan ke Semua Device"):
+                global_settings["pilihan_admin"] = pilihan_baru
+                st.success("Tren berhasil diperbarui!")
+                st.rerun()
+        
+        pilihan_final = global_settings["pilihan_admin"]
+        if pilihan_final:
+            pilihan_final = [x for x in pilihan_final if x in list_komoditas]
+            if pilihan_final:
+                df_plot = df_valid[df_valid['KOMODITAS'].isin(pilihan_final)].melt(id_vars=['KOMODITAS'], value_vars=['HARGA KEMARIN', 'HARGA HARI INI'], var_name='Waktu', value_name='Harga (Rp)')
+                fig = px.bar(df_plot, x="KOMODITAS", y="Harga (Rp)", color="Waktu", barmode="group", text_auto='.2s', color_discrete_map={'HARGA KEMARIN': '#94A3B8', 'HARGA HARI INI': '#059669'})
+                st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("💡 Belum ada data tren yang dipublikasikan oleh Admin.")
+
+    elif pilihan == "📰 Media & Berita":
+        st.title("📰 Media & Berita")
+        for _, row in df_berita.iloc[::-1].iterrows():
+            st.markdown(f'<div class="card-container"><h3>{row["Kegiatan"]}</h3><p>📅 {row["Tanggal"]}</p></div>', unsafe_allow_html=True)
+            link = str(row['Link'])
+            if link.startswith("http"):
+                if any(ext in link.lower() for ext in ['.jpg', '.png', '.jpeg']): st.image(link, use_container_width=True)
+                st.markdown(f'<a href="{link}" target="_blank" style="text-decoration:none; color:#4F46E5; font-weight:bold; padding:10px; background:#EEF2FF; border-radius:8px;">📂 Lihat Detail</a>', unsafe_allow_html=True)
+
+    elif pilihan == "📥 Pusat Unduhan":
+        st.title("📥 Pusat Unduhan")
+        col1, col2 = st.columns(2)
+        with col1: st.download_button("Unduh CSV Harga", df_harga.to_csv(index=False).encode('utf-8'), "Harga_Ngada.csv", "text/csv", use_container_width=True)
+        with col2: st.download_button("Unduh CSV Berita", df_berita.to_csv(index=False).encode('utf-8'), "Media_Ngada.csv", "text/csv", use_container_width=True)
+
+    elif pilihan == "ℹ️ Komitmen Smart ASN":
+        st.title("ℹ️ Komitmen Smart ASN")
+        st.markdown(f'<div class="card-container"><h3>Transparansi & Akuntabilitas</h3><p>{global_settings["about_text"]}</p></div>', unsafe_allow_html=True)
+        if is_admin:
+            with st.expander("📝 Edit Penjelasan Tentang Kami"):
+                new_about = st.text_area("Ganti Isi Komitmen:", value=global_settings["about_text"])
+                if st.button("Simpan Perubahan Komitmen"):
+                    global_settings["about_text"] = new_about
+                    st.success("Teks komitmen berhasil diperbarui!")
+                    st.rerun()
 else:
-    st.info("Sedang menghubungkan ke Google Sheets... Jika lama, pastikan file Excel tidak sedang dalam keadaan 'Filter' aktif.")
+    st.error("⚠️ Gagal memuat data.")
