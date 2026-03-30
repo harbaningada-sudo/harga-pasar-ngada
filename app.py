@@ -26,7 +26,7 @@ global_settings = get_global_settings()
 # --- 3. DETEKSI PINTU RAHASIA ---
 jalur_rahasia = st.query_params.get("status") == "set"
 
-# --- 4. CSS KUSTOM (FIX TEKS HITAM & UI RAPI) ---
+# --- 4. CSS KUSTOM (FIX TEKS HITAM & UI SETDA) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
@@ -62,7 +62,16 @@ st.markdown("""
     }
     
     .price-main { font-size: 1.5rem; font-weight: 800; color: #000000 !important; }
-    .card-container b, .card-container small { color: #000000 !important; }
+    
+    /* Styling khusus tulisan instansi di sidebar */
+    .sidebar-dept {
+        text-align: center;
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: #059669 !important;
+        margin-top: 10px;
+        line-height: 1.4;
+    }
     
     .block-container { padding-top: 5rem !important; }
     </style>
@@ -95,6 +104,10 @@ with st.sidebar:
     st.markdown("<br>", unsafe_allow_html=True)
     if os.path.exists("logo_ngada.png"): 
         st.image("logo_ngada.png", use_container_width=True)
+    
+    # --- TULISAN INSTANSI DI BAWAH LOGO ---
+    st.markdown('<div class="sidebar-dept">Bagian Perekonomian dan SDA<br>Setda Kab. Ngada</div>', unsafe_allow_html=True)
+    
     st.divider()
     pilihan = st.radio("Menu Layanan Digital:", [
         "🏠 Dashboard Beranda", 
@@ -129,12 +142,10 @@ if not df_harga.empty:
 
         col_foto, col_data = st.columns([1, 2])
         with col_foto:
-            # Foto Pimpinan
             file_pimpinan = "Bupati-dan-Wakil-Bupati-Ngada-jpg.jpeg"
             if os.path.exists(file_pimpinan):
                 st.image(file_pimpinan, use_container_width=True, caption="Pimpinan Daerah Kabupaten Ngada")
             st.divider()
-            # Foto Pasar
             if os.path.exists("IMG_20251125_111048.jpg"): 
                 st.image("IMG_20251125_111048.jpg", use_container_width=True, caption="Dokumentasi Pasar")
         
@@ -164,14 +175,8 @@ if not df_harga.empty:
         
         if is_admin:
             st.warning("⚙️ MODE PENGATURAN TREN")
-            # --- FIX ERROR: Validasi pilihan lama dengan data terbaru ---
             safe_defaults = [x for x in global_settings["pilihan_admin"] if x in list_komoditas]
-            
-            pilihan_baru = st.multiselect(
-                "Pilih komoditas untuk publik:", 
-                options=list_komoditas, 
-                default=safe_defaults
-            )
+            pilihan_baru = st.multiselect("Pilih komoditas untuk publik:", options=list_komoditas, default=safe_defaults)
             if st.button("🚀 Publikasikan ke Semua Device"):
                 global_settings["pilihan_admin"] = pilihan_baru
                 st.success("Tren berhasil diperbarui!")
@@ -179,7 +184,6 @@ if not df_harga.empty:
         
         pilihan_final = global_settings["pilihan_admin"]
         if pilihan_final:
-            # Validasi lagi untuk tampilan publik agar tidak crash
             pilihan_final = [x for x in pilihan_final if x in list_komoditas]
             if pilihan_final:
                 df_plot = df_valid[df_valid['KOMODITAS'].isin(pilihan_final)].melt(id_vars=['KOMODITAS'], value_vars=['HARGA KEMARIN', 'HARGA HARI INI'], var_name='Waktu', value_name='Harga (Rp)')
