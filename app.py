@@ -25,7 +25,7 @@ def get_global_settings():
 global_settings = get_global_settings()
 is_admin = st.query_params.get("status") == "set"
 
-# --- 3. CSS KUSTOM (FIX WARNA HARGA & UI) ---
+# --- 3. CSS KUSTOM (WARNA DINAMIS & LAYOUT) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
@@ -61,12 +61,12 @@ st.markdown("""
         background: white !important; padding: 20px; border-radius: 15px;
         border: 1px solid #E2E8F0; margin-bottom: 10px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        transition: transform 0.2s;
     }
-    .card-container:hover { transform: scale(1.01); }
     
-    .price-main { font-size: 1.5rem; font-weight: 800; }
-    .status-text { font-size: 0.85rem; font-weight: 700; margin-top: -5px; }
+    .price-main { font-size: 1.4rem; font-weight: 800; }
+    .price-sub { font-size: 1rem; font-weight: 600; color: #475569 !important; }
+    .status-label { font-size: 0.8rem; font-weight: 800; text-transform: uppercase; }
+    .price-box { text-align: right; border-left: 1px solid #EEE; padding-left: 15px; min-width: 150px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -80,7 +80,6 @@ def get_img_as_base64(file):
 @st.cache_data(ttl=60)
 def load_all_data():
     try:
-        # Menggunakan gid format stabil
         url_h = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR54g3RrvlqqZ3ppTrKiKK-L1fVT8YSvnXfihtO-H795s0KQ6H_TewZLFFAXPi-ktMizomg3JHdIIjI/pub?gid=929993273&single=true&output=csv"
         df_h = pd.read_csv(url_h, skiprows=1)
         df_h = df_h.iloc[:, [0, 1, 2, 3, 4, 5]]
@@ -134,6 +133,7 @@ if not df_harga.empty:
             try:
                 k_ini = int(pd.to_numeric(row['KECIL_INI'], errors='coerce') or 0)
                 k_kmrn = int(pd.to_numeric(row['KECIL_KMRN'], errors='coerce') or 0)
+                b_ini = int(pd.to_numeric(row['BESAR_INI'], errors='coerce') or 0)
                 sel = k_ini - k_kmrn
                 
                 # Penentuan Warna & Label
@@ -151,8 +151,12 @@ if not df_harga.empty:
                             <b style="font-size:1.2rem;">{row["KOMODITAS"]}</b><br>
                             <small>Satuan: {row["SATUAN"]}</small>
                         </div>
-                        <div style="text-align: right;">
-                            <div style="color:{warna};" class="status-text">{ikon} {status}</div>
+                        <div class="price-box">
+                            <small style="color: #64748B;">Pedagang Besar</small><br>
+                            <span class="price-sub">Rp {b_ini:,}</span>
+                        </div>
+                        <div class="price-box">
+                            <div style="color:{warna};" class="status-label">{ikon} {status}</div>
                             <div class="price-main" style="color:{warna};">Rp {k_ini:,}</div>
                             <small style="color: #64748B;">Kemarin: Rp {k_kmrn:,}</small>
                         </div>
@@ -174,5 +178,15 @@ if not df_harga.empty:
             df_p = df_v[df_v['KOMODITAS'].isin(global_settings["pilihan_admin"])]
             df_m = df_p.melt(id_vars=['KOMODITAS'], value_vars=['KECIL_KMRN', 'KECIL_INI'], var_name='Waktu', value_name='Harga')
             st.plotly_chart(px.bar(df_m, x="KOMODITAS", y="Harga", color="Waktu", barmode="group", color_discrete_map={'KECIL_KMRN': '#94A3B8', 'KECIL_INI': '#059669'}), use_container_width=True)
+        else:
+            st.info("💡 Belum ada data tren yang dipilih oleh Admin.")
+
+    elif pilihan == "ℹ️ Komitmen ASN":
+        st.title("ℹ️ Komitmen Smart ASN")
+        st.markdown(f'<div class="card-container"><h3>Visi & Misi</h3><p>{global_settings["about_text"]}</p></div>', unsafe_allow_html=True)
+        if is_admin:
+            with st.expander("🛠️ PANEL ADMIN: EDIT TENTANG KAMI"):
+                global_settings["about_text"] = st.text_area("Isi Komitmen:", value=global_settings["about_text"])
+                if st.button("💾 Simpan Perubahan Komitmen"): st.success("Diperbarui!"); st.rerun()
 else:
     st.error("Gagal memuat data.")
