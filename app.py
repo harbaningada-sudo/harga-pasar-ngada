@@ -4,54 +4,61 @@ import plotly.express as px
 import os
 import base64
 
-# --- 1. KONFIGURASI HALAMAN ---
+# --- 1. SETTING HALAMAN ---
 st.set_page_config(page_title="Ekonomi Digital Ngada", page_icon="🏛️", layout="wide")
 
-# --- 2. CSS BIAR TULISAN HITAM & RAPI ---
+# --- 2. CSS BIAR TULISAN HITAM PEKAT ---
 st.markdown("""
     <style>
     html, body, [class*="css"], .stMarkdown, p, span, div, label { color: #000000 !important; font-family: 'Inter', sans-serif; }
     .stApp { background-color: #FFFFFF !important; }
     .hero-section { background: linear-gradient(135deg, #059669 0%, #10B981 100%); padding: 30px; border-radius: 15px; margin-bottom: 20px; color: white !important; }
-    .hero-section h1, .hero-section p { color: white !important; }
     .card-container { background: white !important; padding: 15px; border-radius: 12px; border: 1px solid #E2E8F0; margin-bottom: 10px; border-left: 10px solid #059669; }
-    .status-badge { padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
 
-def get_img_as_base64(file):
-    try:
-        with open(file, "rb") as f: return base64.b64encode(f.read()).decode()
-    except: return ""
-
-# --- 3. FUNGSI MUAT DATA ---
-@st.cache_data(ttl=60)
+# --- 3. FUNGSI AMBIL DATA (VERSI ANTI-ERROR) ---
+@st.cache_data(ttl=10) # Cache diset sebentar saja biar cepat update
 def load_data():
     try:
-        # LINK CSV DARI GAMBAR BAPAK (SUDAH SAYA MASUKKAN)
+        # Link CSV Bapak
         URL_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCUaMJFl1dD_iZR9R7QE7dV5S-VlbwU_SUcS5wbzRlyOflTcRg18fiOvu29f4Zd1RMw-WCbwRFo-m2/pub?gid=659700295&single=true&output=csv"
         
-        df = pd.read_csv(URL_CSV, skiprows=6)
-        # Ambil kolom Jenis Komoditi(0), Satuan(2), Besar-Kemarin(3), Besar-HariIni(4), Kecil-Kemarin(5), Kecil-HariIni(6)
-        df = df.iloc[:, [0, 2, 3, 4, 5, 6]]
-        df.columns = ['KOMODITAS', 'SATUAN', 'B_KMRN', 'B_INI', 'K_KMRN', 'K_INI']
-        df = df.dropna(subset=['KOMODITAS'])
+        # Baca data langsung tanpa skip dulu untuk tes
+        df = pd.read_csv(URL_CSV)
+        
+        # Kita ambil data mulai dari baris yang ada tulisan "Beras" (biasanya baris ke-7 atau index ke-6)
+        # Kita bersihkan data agar mulai dari baris ke-7
+        df_clean = df.iloc[5:].copy() 
+        
+        # Ambil kolom A (0), C (2), D (3), E (4), F (5), G (6)
+        df_final = df_clean.iloc[:, [0, 2, 3, 4, 5, 6]]
+        df_final.columns = ['KOMODITAS', 'SATUAN', 'B_KMRN', 'B_INI', 'K_KMRN', 'K_INI']
+        
+        # Hapus baris kosong
+        df_final = df_final.dropna(subset=['KOMODITAS'])
 
-        # Bersihkan titik (.) agar bisa dihitung (Contoh: 13.500 jadi 13500)
+        # Bersihkan Karakter Titik/Koma agar bisa dihitung
         for col in ['B_KMRN', 'B_INI', 'K_KMRN', 'K_INI']:
-            df[col] = df[col].astype(str).str.replace('.', '').str.replace(',', '').str.replace('-', '0').str.strip()
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            df_final[col] = df_final[col].astype(str).str.replace('.', '', regex=False).str.replace(',', '', regex=False).str.replace('-', '0').str.strip()
+            df_final[col] = pd.to_numeric(df_final[col], errors='coerce').fillna(0)
             
-        return df
+        return df_final
     except Exception as e:
+        st.error(f"Pesan Error Teknis: {e}") # Ini akan memunculkan error aslinya kalau gagal
         return None
 
 df = load_data()
 
-# --- 4. SIDEBAR MEWAH ---
+# --- 4. SIDEBAR ---
+def get_base64(file):
+    try:
+        with open(file, "rb") as f: return base64.b64encode(f.read()).decode()
+    except: return ""
+
 with st.sidebar:
-    img_p = get_img_as_base64("Bupati-dan-Wakil-Bupati-Ngada-jpg.jpeg")
-    img_l = get_img_as_base64("logo_ngada.png")
+    img_p = get_base64("Bupati-dan-Wakil-Bupati-Ngada-jpg.jpeg")
+    img_l = get_base64("logo_ngada.png")
     st.markdown(f"""
         <div style="background:url(data:image/jpeg;base64,{img_p}); background-size:cover; height:180px; border-radius:15px; position:relative; margin-bottom:15px;">
             <div style="position:absolute; bottom:5px; left:5px; background:rgba(255,255,255,0.9); padding:5px; border-radius:8px; border:1px solid #059669;">
@@ -60,46 +67,37 @@ with st.sidebar:
             </div>
         </div>
     """, unsafe_allow_html=True)
-    menu = st.radio("Menu Layanan:", ["🏠 Dashboard", "📈 Tren Harga"])
+    menu = st.radio("Menu:", ["🏠 Dashboard Utama", "📈 Tren Harga"])
 
-# --- 5. TAMPILAN UTAMA ---
-if df is not None:
-    if menu == "🏠 Dashboard":
-        st.markdown(f'<div class="hero-section"><h1>Smart Economy Ngada 👋</h1><p>Pelayanan transparan terhadap harga komoditas bagi masyarakat Ngada.</p></div>', unsafe_allow_html=True)
+# --- 5. TAMPILAN ---
+if df is not None and not df.empty:
+    if menu == "🏠 Dashboard Utama":
+        st.markdown('<div class="hero-section"><h1>Smart Economy Ngada 👋</h1><p>Data harga pasar terbaru Kabupaten Ngada.</p></div>', unsafe_allow_html=True)
         
         for _, row in df.iterrows():
-            # Logika Kategori (jika Satuan kosong)
-            if pd.isna(row['SATUAN']) or str(row['SATUAN']).strip() == "" or str(row['SATUAN']) == "0":
+            # Logika Kategori: Jika Satuan kosong atau berupa angka aneh
+            if pd.isna(row['SATUAN']) or str(row['SATUAN']).strip() in ["", "0", "3", "SATUAN"]:
                 st.markdown(f"<h3 style='border-bottom:3px solid #059669; margin-top:30px; color:#059669;'>📂 {row['KOMODITAS']}</h3>", unsafe_allow_html=True)
             else:
-                # HITUNG SELISIH OTOMATIS (Fokus Pedagang Kecil)
-                sel = row['K_INI'] - row['K_KMRN']
-                if sel > 0:
-                    stt = f"<span class='status-badge' style='background:#FEE2E2; color:#DC2626;'>🔺 Naik Rp {sel:,.0f}</span>"
-                elif sel < 0:
-                    stt = f"<span class='status-badge' style='background:#D1FAE5; color:#059669;'>🔻 Turun Rp {abs(sel):,.0f}</span>"
+                selisih = row['K_INI'] - row['K_KMRN']
+                if selisih > 0:
+                    status = f"<span style='color:red;'>🔺 Naik Rp {selisih:,.0f}</span>"
+                elif selisih < 0:
+                    status = f"<span style='color:green;'>🔻 Turun Rp {abs(selisih):,.0f}</span>"
                 else:
-                    stt = f"<span class='status-badge' style='background:#F1F5F9; color:#64748B;'>➖ Stabil</span>"
+                    status = "<span style='color:gray;'>➖ Stabil</span>"
 
                 st.markdown(f"""
                 <div class="card-container">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <div><b>{row['KOMODITAS']}</b><br><small>Satuan: {row['SATUAN']}</small></div>
                         <div style="text-align:right;">
-                            {stt}<br>
+                            {status}<br>
                             <span style="font-size:1.2rem; font-weight:800;">Rp {row['K_INI']:,.0f}</span><br>
-                            <small style="color:gray;">Pedagang Besar: Rp {row['B_INI']:,.0f}</small>
+                            <small style="color:gray;">Besar: Rp {row['B_INI']:,.0f}</small>
                         </div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-    
-    elif menu == "📈 Tren Harga":
-        st.title("📈 Analisis Tren")
-        df_v = df[df['SATUAN'].notna()]
-        pilih = st.multiselect("Pilih Komoditas:", df_v['KOMODITAS'].unique())
-        if pilih:
-            df_p = df_v[df_v['KOMODITAS'].isin(pilih)]
-            st.plotly_chart(px.bar(df_p, x="KOMODITAS", y=["K_KMRN", "K_INI"], barmode="group", color_discrete_map={"K_KMRN": "#94A3B8", "K_INI": "#059669"}))
 else:
-    st.error("⚠️ Data gagal dimuat. Tunggu sebentar atau refresh halaman.")
+    st.info("Sedang menghubungkan ke Google Sheets... Jika lama, pastikan file Excel tidak sedang dalam keadaan 'Filter' aktif.")
