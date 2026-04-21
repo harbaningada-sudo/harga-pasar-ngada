@@ -12,77 +12,83 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- 2. LOGIKA PRIVASI ADMIN (URL: ?admin=rahasia) ---
+# --- 2. CEK STATUS ADMIN ---
+# URL Umum: ...streamlit.app
+# URL Admin: ...streamlit.app/?admin=rahasia
 query_params = st.query_params
 is_admin = query_params.get("admin") == "rahasia"
 
-# Menggunakan session_state agar perubahan teks tersimpan sementara selama sesi aktif
-if "hero_title" not in st.session_state:
-    st.session_state.hero_title = "Smart Economy Ngada 👋"
-if "hero_subtitle" not in st.session_state:
-    st.session_state.hero_subtitle = "Pelayanan transparan terhadap harga komoditas bagi masyarakat Ngada."
-if "about_text" not in st.session_state:
-    st.session_state.about_text = "Inovasi digital ini menjamin masyarakat mendapatkan akses informasi harga yang jujur dan akurat melalui pemantauan rutin di pasar-pasar lokal Kabupaten Ngada."
+# --- 3. DATA DEFAULT (Yang akan tampil di URL Umum) ---
+# Tip: Jika ingin permanen selamanya, teks ini yang harus kamu edit di kode
+DEFAULT_HERO_TITLE = "Smart Economy Ngada 👋"
+DEFAULT_HERO_SUBTITLE = "Pelayanan transparan terhadap harga komoditas bagi masyarakat Ngada."
+DEFAULT_ABOUT = "Inovasi digital ini menjamin masyarakat mendapatkan akses informasi harga yang jujur dan akurat melalui pemantauan rutin di pasar-pasar lokal Kabupaten Ngada."
 
-# Navigasi Menu
+if "hero_title" not in st.session_state:
+    st.session_state.hero_title = DEFAULT_HERO_TITLE
+if "hero_subtitle" not in st.session_state:
+    st.session_state.hero_subtitle = DEFAULT_HERO_SUBTITLE
+if "about_text" not in st.session_state:
+    st.session_state.about_text = DEFAULT_ABOUT
+
+# Logika Navigasi
 if 'menu_aktif' not in st.session_state:
     st.session_state.menu_aktif = "🏠 Dashboard"
 
 def set_menu(nama_menu):
     st.session_state.menu_aktif = nama_menu
 
-# --- 3. CSS KUSTOM ---
-st.markdown("""
+# --- 4. CSS KUSTOM (DISAMAKAN UNTUK SEMUA URL) ---
+st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
-    html, body, [class*="css"], .stMarkdown, p, span, div, label { 
-        font-family: 'Inter', sans-serif; color: #1E293B !important; 
-    }
-    .stApp { background-color: #F8FAFC !important; }
     
-    /* Pimpinan Header */
-    .pimpinan-container {
+    /* Dasar Layout */
+    .stApp {{ background-color: #F8FAFC !important; font-family: 'Inter', sans-serif; }}
+    
+    /* Header Pimpinan */
+    .pimpinan-container {{
         display: flex; align-items: center; background: white; 
-        padding: 20px; border-radius: 20px; margin-bottom: 20px;
+        padding: 20px; border-radius: 20px; margin-bottom: 25px;
         border: 1px solid #E2E8F0; box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-    }
-    .pimpinan-img { width: 110px; height: 110px; object-fit: cover; border-radius: 15px; border: 3px solid #059669; }
-    .pimpinan-text { margin-left: 20px; }
+    }}
+    .pimpinan-img {{ width: 110px; height: 110px; object-fit: cover; border-radius: 15px; border: 3px solid #059669; }}
+    .pimpinan-text {{ margin-left: 20px; }}
 
-    /* Hero */
-    .hero-section {
+    /* Hero Section */
+    .hero-section {{
         background: linear-gradient(135deg, #059669 0%, #10B981 100%);
-        padding: 45px; border-radius: 25px; margin-bottom: 30px; text-align: center;
-    }
-    .hero-section h1 { color: #FFFFFF !important; font-size: 2.6rem !important; font-weight: 800; margin-bottom: 10px; }
-    .hero-section p { color: #ECFDF5 !important; font-size: 1.1rem; opacity: 0.9; }
+        padding: 50px 20px; border-radius: 25px; margin-bottom: 35px; text-align: center;
+        color: white !important;
+    }}
+    .hero-section h1 {{ font-size: 2.8rem !important; font-weight: 800; margin-bottom: 10px; color: white !important; }}
+    .hero-section p {{ font-size: 1.2rem; opacity: 0.95; color: #ECFDF5 !important; }}
 
-    /* Menu Cards */
-    .menu-card {
-        background: white; padding: 25px; border-radius: 20px; text-align: center;
-        border: 1px solid #E2E8F0; transition: all 0.3s ease; height: 170px;
+    /* Grid Menu Cards */
+    .menu-card {{
+        background: white; padding: 25px; border-radius: 22px; text-align: center;
+        border: 1px solid #E2E8F0; transition: all 0.3s ease; height: 180px;
         display: flex; flex-direction: column; justify-content: center; align-items: center;
-    }
-    .menu-card:hover { transform: translateY(-5px); border-color: #059669; box-shadow: 0 10px 20px rgba(0,0,0,0.08); }
-    .menu-icon { font-size: 2.8rem; margin-bottom: 10px; }
-    .menu-title { font-weight: 800; font-size: 0.9rem; color: #059669 !important; letter-spacing: 0.5px; }
+    }}
+    .menu-card:hover {{ transform: translateY(-8px); border-color: #059669; box-shadow: 0 12px 24px rgba(5, 150, 105, 0.15); }}
+    .menu-icon {{ font-size: 3rem; margin-bottom: 12px; }}
+    .menu-title {{ font-weight: 800; font-size: 0.95rem; color: #059669 !important; text-transform: uppercase; }}
 
-    /* Admin Bar */
-    .admin-bar {
-        background: #DC2626; color: white; padding: 12px; 
-        text-align: center; font-weight: bold; border-radius: 12px; margin-bottom: 25px;
-        box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
-    }
+    /* Badge Admin */
+    .admin-indicator {{
+        background: #EF4444; color: white; padding: 8px 20px; border-radius: 10px;
+        text-align: center; font-weight: bold; margin-bottom: 20px; font-size: 0.8rem;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. FUNGSI GAMBAR ---
+# --- 5. FUNGSI HELPER GAMBAR ---
 def get_img_as_base64(file):
     try:
         with open(file, "rb") as f: return base64.b64encode(f.read()).decode()
     except: return ""
 
-# --- 5. DATA LOADING ---
+# --- 6. LOAD DATA HARGA ---
 @st.cache_data(ttl=60)
 def load_data():
     try:
@@ -95,17 +101,18 @@ def load_data():
 
 df_harga = load_data()
 
-# --- 6. RENDER HALAMAN ---
+# --- 7. RENDER ---
 
-# Tampilkan Bar Admin Jika Aktif
+# Munculkan indikator hanya jika di URL Admin
 if is_admin:
-    st.markdown('<div class="admin-bar">🔓 MODE EDITOR AKTIF (URL RAHASIA)</div>', unsafe_allow_html=True)
+    st.markdown('<div class="admin-indicator">🔓 MODE EDITOR AKTIF - Perubahan bersifat sementara (Sesi ini)</div>', unsafe_allow_html=True)
 
 if not df_harga.empty:
     
-    # --- BERANDA (DASHBOARD) ---
+    # HALAMAN BERANDA (Tampilan Umum & Admin Sama)
     if st.session_state.menu_aktif == "🏠 Dashboard":
-        # Header Foto Bupati
+        
+        # Header Foto Bupati & Wakil (Wajib ada di semua URL)
         img_p = get_img_as_base64("Bupati-dan-Wakil-Bupati-Ngada-jpg.jpeg")
         img_l = get_img_as_base64("logo_ngada.png")
         st.markdown(f"""
@@ -119,7 +126,7 @@ if not df_harga.empty:
             </div>
         """, unsafe_allow_html=True)
 
-        # Hero Section
+        # Hero Section (Teks diambil dari session agar bisa di-edit admin)
         st.markdown(f'''
             <div class="hero-section">
                 <h1>{st.session_state.hero_title}</h1>
@@ -127,8 +134,8 @@ if not df_harga.empty:
             </div>
         ''', unsafe_allow_html=True)
         
-        # Grid 5 Kolom Menu Utama
-        c1, c2, c3, c4, c5 = st.columns(5)
+        # Grid 5 Kolom Menu
+        cols = st.columns(5)
         menu_items = [
             {"icon": "🛒", "title": "HARGA PASAR", "target": "🛒 Harga Pasar"},
             {"icon": "📈", "title": "TREN HARGA", "target": "📈 Tren Harga"},
@@ -136,7 +143,7 @@ if not df_harga.empty:
             {"icon": "📥", "title": "PUSAT DATA", "target": "📥 Pusat Unduhan"},
             {"icon": "🏛️", "title": "KOMITMEN", "target": "ℹ️ Komitmen ASN"}
         ]
-        cols = [c1, c2, c3, c4, c5]
+        
         for i, m in enumerate(menu_items):
             with cols[i]:
                 st.markdown(f'''
@@ -145,60 +152,36 @@ if not df_harga.empty:
                         <div class="menu-title">{m["title"]}</div>
                     </div>
                 ''', unsafe_allow_html=True)
-                if st.button(f"Klik {m['title']}", key=f"btn_{i}", use_container_width=True):
+                if st.button(f"Lihat {m['title']}", key=f"btn_{i}", use_container_width=True):
                     set_menu(m["target"])
                     st.rerun()
 
-        # Tombol Edit Hero (Hanya Muncul untuk Admin)
+        # Fitur Edit Hero (HANYA MUNCUL DI URL ADMIN)
         if is_admin:
-            st.divider()
-            with st.expander("🛠️ EDIT HERO (KHUSUS ADMIN)"):
-                st.session_state.hero_title = st.text_input("Ganti Judul Hero:", st.session_state.hero_title)
-                st.session_state.hero_subtitle = st.text_area("Ganti Sub-judul Hero:", st.session_state.hero_subtitle)
-                st.info("Perubahan akan terlihat di halaman depan.")
+            st.write("---")
+            with st.expander("🛠️ PANEL EDITOR HERO"):
+                st.session_state.hero_title = st.text_input("Judul Utama:", st.session_state.hero_title)
+                st.session_state.hero_subtitle = st.text_area("Sub-judul:", st.session_state.hero_subtitle)
+                st.info("💡 Tips: Perubahan di sini hanya berlaku sementara. Untuk permanen, ubah nilai DEFAULT di kode Python.")
 
-    # --- HALAMAN DETAIL ---
+    # HALAMAN DETAIL
     else:
-        col_back, col_title = st.columns([1, 5])
-        with col_back:
-            if st.button("⬅️ Beranda"):
-                set_menu("🏠 Dashboard")
-                st.rerun()
-        with col_title:
-            st.markdown(f"### {st.session_state.menu_aktif}")
+        if st.button("⬅️ Kembali ke Menu Utama"):
+            set_menu("🏠 Dashboard")
+            st.rerun()
         
         st.divider()
+        st.subheader(f"Halaman {st.session_state.menu_aktif}")
 
-        # 1. Harga Pasar
         if st.session_state.menu_aktif == "🛒 Harga Pasar":
             st.dataframe(df_harga, use_container_width=True)
 
-        # 2. Tren Harga (Ada Fitur Edit Admin)
-        elif st.session_state.menu_aktif == "📈 Tren Harga":
-            if is_admin:
-                st.warning("Mode Admin: Anda dapat memfilter tampilan default di bawah ini.")
-            
-            df_v = df_harga.dropna(subset=['SATUAN'])
-            pilihan = st.multiselect("Pilih Komoditas untuk Grafik:", options=df_v['KOMODITAS'].unique())
-            if pilihan:
-                df_p = df_v[df_v['KOMODITAS'].isin(pilihan)]
-                fig = px.bar(df_p, x="KOMODITAS", y="KECIL_INI", title="Perbandingan Harga Pasar", color_discrete_sequence=['#10B981'])
-                st.plotly_chart(fig, use_container_width=True)
-
-        # 3. Komitmen ASN (Ada Fitur Edit Admin)
         elif st.session_state.menu_aktif == "ℹ️ Komitmen ASN":
-            st.markdown(f'''
-                <div style="background:white; padding:30px; border-radius:15px; border-left:8px solid #059669; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
-                    <p style="font-size:1.1rem; line-height:1.8;">{st.session_state.about_text}</p>
-                </div>
-            ''', unsafe_allow_html=True)
-            
+            st.info(st.session_state.about_text)
             if is_admin:
-                st.divider()
-                with st.expander("📝 EDIT TEKS KOMITMEN (KHUSUS ADMIN)"):
-                    st.session_state.about_text = st.text_area("Update Visi/Misi:", value=st.session_state.about_text, height=200)
-                    if st.button("Simpan Teks"):
-                        st.success("Teks berhasil diperbarui!")
+                with st.expander("📝 Edit Teks Komitmen"):
+                    st.session_state.about_text = st.text_area("Teks Baru:", st.session_state.about_text, height=150)
+                    if st.button("Update"): st.rerun()
 
 else:
-    st.error("Koneksi ke database bermasalah. Pastikan link Google Sheets benar.")
+    st.error("Gagal menarik data dari Google Sheets.")
