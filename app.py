@@ -7,7 +7,7 @@ import base64
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(page_title="Portal Ekonomi Ngada", page_icon="🏛️", layout="wide", initial_sidebar_state="collapsed")
 
-# --- 2. SISTEM MEMORI ---
+# --- 2. SISTEM MEMORI (EDITABLE) ---
 @st.cache_resource
 def init_data():
     return {
@@ -25,7 +25,7 @@ is_admin = st.query_params.get("status") == "set"
 if 'page' not in st.session_state:
     st.session_state.page = "Beranda"
 
-# --- 3. HELPER GAMBAR & CSS (WARNA LATAR BIRU) ---
+# --- 3. HELPER GAMBAR & CSS (BIRU & TEKS HITAM) ---
 def get_base64(file):
     if os.path.exists(file):
         with open(file, "rb") as f: return base64.b64encode(f.read()).decode()
@@ -37,18 +37,16 @@ img_logo = get_base64("logo_ngada.png")
 st.markdown(f"""
     <style>
     /* LATAR BELAKANG BIRU MUDA */
-    .stApp {{
-        background-color: #E0F2FE !important; /* Warna Biru Sky Light */
-    }}
+    .stApp {{ background-color: #E0F2FE !important; }}
     
-    /* PAKSA SEMUA TEKS JADI HITAM AGAR JELAS DI BG BIRU */
+    /* PAKSA SEMUA TEKS JADI HITAM PEKAT */
     html, body, [data-testid="stWidgetLabel"], .stText, p, h1, h2, h3, h4, h5, h6, span, div, li {{
         color: #000000 !important;
     }}
     
     [data-testid="column"] {{ min-width: 0px !important; }}
     
-    /* Header & Pimpinan */
+    /* Header Pimpinan */
     .pimpinan-frame {{
         width: 100px; height: 100px; border-radius: 15px; border: 3px solid #059669;
         background-image: url("data:image/jpeg;base64,{img_pimpinan}");
@@ -59,18 +57,19 @@ st.markdown(f"""
         background: white; border-radius: 5px; padding: 2px;
     }}
 
-    /* Card Harga (Putih agar kontras dengan BG Biru) */
+    /* Card Harga Putih agar Kontras */
     .price-card {{
         background: #FFFFFF !important; padding: 12px; border-radius: 12px; 
         box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 8px; border-left: 5px solid #059669;
     }}
     .flex-container {{ display: flex; justify-content: space-between; align-items: center; gap: 5px; }}
-    .price-box {{ text-align: center; flex: 1; font-size: 0.85rem; }}
-
-    /* Navigasi */
+    
+    /* Input Search & Admin agar Teks Hitam */
+    input {{ color: #000000 !important; }}
+    
+    /* Tombol Navigasi Biru Tua */
     .stButton button {{
-        background-color: #0369a1 !important; /* Biru Tua untuk Tombol */
-        color: #FFFFFF !important; /* Teks Tombol Putih agar kontras */
+        background-color: #0369a1 !important; color: #FFFFFF !important;
         padding: 5px 2px; font-size: 0.75rem !important; border-radius: 8px !important;
     }}
     </style>
@@ -113,16 +112,27 @@ with st.container():
         if m[i].button(p, key=f"nav_{p}", use_container_width=True): st.session_state.page = p
 st.divider()
 
-# --- 6. PANEL ADMIN ---
+# --- 6. PANEL ADMIN LENGKAP (URL: ?status=set) ---
 if is_admin:
     with st.sidebar:
-        st.header("🛠️ Admin Editor")
-        with st.expander("🏠 Konten"):
-            store["hero_title"] = st.text_input("Judul", store["hero_title"])
+        st.header("🛠️ Panel Editor Admin")
+        
+        with st.expander("🏠 Edit Beranda", expanded=True):
+            store["hero_title"] = st.text_input("Judul Utama", store["hero_title"])
             store["hero_subtitle"] = st.text_area("Sub-judul", store["hero_subtitle"])
-        with st.expander("🏛️ Potensi"):
-            store["potensi_pertanian"] = st.text_area("Tani", store["potensi_pertanian"])
-            store["potensi_pariwisata"] = st.text_area("Wisata", store["potensi_pariwisata"])
+        
+        with st.expander("📈 Edit Grafik Tren"):
+            all_items = df_harga['KOMODITAS'].unique().tolist() if not df_harga.empty else []
+            store["tren_pilihan"] = st.multiselect("Pilih Komoditas", all_items, default=store["tren_pilihan"] if store["tren_pilihan"] else all_items[:5])
+            
+        with st.expander("🏛️ Edit Potensi"):
+            store["potensi_pertanian"] = st.text_area("Teks Pertanian", store["potensi_pertanian"])
+            store["potensi_pariwisata"] = st.text_area("Teks Pariwisata", store["potensi_pariwisata"])
+            
+        with st.expander("ℹ️ Edit Tentang"):
+            store["about_text"] = st.text_area("Konten Tentang", store["about_text"])
+            
+        st.success("Mode Admin Aktif")
 
 # --- 7. LOGIKA HALAMAN ---
 
@@ -139,7 +149,7 @@ if st.session_state.page == "Beranda":
 
 elif st.session_state.page == "Harga":
     st.markdown("### 🛍️ Pantauan Harga")
-    query = st.text_input("🔍 Cari Komoditas...", "").lower()
+    query = st.text_input("🔍 Cari Nama Komoditas...", "").lower()
     if not df_harga.empty:
         filtered = df_harga[df_harga['KOMODITAS'].str.lower().str.contains(query)]
         for _, r in filtered.iterrows():
@@ -148,8 +158,8 @@ elif st.session_state.page == "Harga":
             else:
                 st.markdown(f"""<div class="price-card"><div class="flex-container">
                     <div style="flex: 1.2;"><b>{r['KOMODITAS']}</b><br><small>{r['SATUAN']}</small></div>
-                    <div class="price-box"><small>BESAR</small><br>{format_price(r['B_INI'], r['B_KMRN'])}</div>
-                    <div class="price-box" style="border-left:1px solid #eee;"><small>KECIL</small><br>{format_price(r['K_INI'], r['K_KMRN'])}</div>
+                    <div style="flex: 1; text-align:center;"><small>BESAR</small><br>{format_price(r['B_INI'], r['B_KMRN'])}</div>
+                    <div style="flex: 1; text-align:center; border-left:1px solid #eee;"><small>KECIL</small><br>{format_price(r['K_INI'], r['K_KMRN'])}</div>
                 </div></div>""", unsafe_allow_html=True)
 
 elif st.session_state.page == "Tren":
@@ -159,6 +169,13 @@ elif st.session_state.page == "Tren":
         df_p = df_harga[df_harga['KOMODITAS'].isin(pilihan)]
         fig = px.bar(df_p, x='KOMODITAS', y=['K_KMRN', 'K_INI'], barmode='group', color_discrete_map={'K_KMRN': '#94A3B8', 'K_INI': '#0369a1'})
         st.plotly_chart(fig, use_container_width=True)
+
+elif st.session_state.page == "Media":
+    st.subheader("📰 Berita Terkini")
+    if not df_berita.empty:
+        for _, row in df_berita.iloc[::-1].iterrows():
+            with st.expander(f"{row['Tanggal']} - {row['Kegiatan']}"):
+                if "http" in str(row['Link']): st.link_button("Baca Berita", row['Link'])
 
 elif st.session_state.page == "Potensi":
     st.subheader("🏛️ Potensi Daerah")
@@ -174,15 +191,8 @@ elif st.session_state.page == "Potensi":
         if os.path.exists("17 pulau riung.webp"): c4.image("17 pulau riung.webp", caption="Riung")
         st.write(store["potensi_pariwisata"])
 
-elif st.session_state.page == "Media":
-    st.subheader("📰 Berita Terkini")
-    if not df_berita.empty:
-        for _, row in df_berita.iloc[::-1].iterrows():
-            with st.expander(f"{row['Tanggal']} - {row['Kegiatan']}"):
-                if "http" in str(row['Link']): st.link_button("Lihat", row['Link'])
-
 elif st.session_state.page == "Tentang":
     st.write(store["about_text"])
 
 elif st.session_state.page == "Unduh":
-    st.download_button("📥 Download CSV", df_harga.to_csv(index=False), "harga_ngada.csv", use_container_width=True)
+    st.download_button("📥 Download Data CSV", df_harga.to_csv(index=False), "harga_ngada.csv", use_container_width=True)
