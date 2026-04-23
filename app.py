@@ -7,7 +7,7 @@ import base64
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(page_title="Portal Ekonomi Ngada", page_icon="🏛️", layout="wide", initial_sidebar_state="collapsed")
 
-# --- 2. SISTEM MEMORI (DAPAT DIEDIT ADMIN) ---
+# --- 2. SISTEM MEMORI (EDITABLE ADMIN) ---
 @st.cache_resource
 def init_data():
     return {
@@ -16,7 +16,6 @@ def init_data():
         "about_text": "Bagian Perekonomian & SDA Setda Ngada berkomitmen menjaga stabilitas harga daerah.",
         "potensi_pertanian": "Ngada unggul di sektor Kopi Arabika, Cengkeh, dan Pertanian Hortikultura.",
         "potensi_pariwisata": "Destinasi ikonik meliputi Kampung Adat Bena dan Taman Laut 17 Pulau Riung.",
-        "potensi_lainnya": "Sektor UMKM Tenun Ikat dan Bambu menjadi penggerak ekonomi kreatif.",
         "tren_pilihan": [] 
     }
 
@@ -51,7 +50,6 @@ st.markdown(f"""
         background: white; padding: 20px; border-radius: 15px; 
         box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 15px; border-left: 8px solid #059669;
     }}
-    .price-col {{ text-align: center; border-left: 1px solid #f0f0f0; padding: 0 10px; }}
     .news-card {{
         background: white; padding: 15px; border-radius: 12px; border-bottom: 4px solid #059669;
         margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
@@ -59,18 +57,17 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. LOAD DATA (HARGA & BERITA) ---
+# --- 4. LOAD DATA ---
 @st.cache_data(ttl=60)
 def load_all_data():
     try:
-        # Data Harga
         url_h = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR54g3RrvlqqZ3ppTrKiKK-L1fVT8YSvnXfihtO-H795s0KQ6H_TewZLFFAXPi-ktMizomg3JHdIIjI/pub?gid=929993273&single=true&output=csv"
-        df_h = pd.read_csv(url_h, skiprows=1).iloc[:, :6]
+        df_h_raw = pd.read_csv(url_h)
+        df_h = df_h_raw.skiprows(1).iloc[:, :6] if len(df_h_raw) > 1 else df_h_raw
         df_h.columns = ['KOMODITAS', 'SATUAN', 'B_KMRN', 'B_INI', 'K_KMRN', 'K_INI']
         for col in ['B_KMRN', 'B_INI', 'K_KMRN', 'K_INI']:
             df_h[col] = pd.to_numeric(df_h[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0).astype(int)
         
-        # Data Berita
         url_b = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT2LMrwn5xk782uKyRGkeOzCXt3DDK-iBxe_F8RUkI7Zk4iYgMVcE_f0XbSc8R72Q/pub?gid=201409714&single=true&output=csv"
         df_b = pd.read_csv(url_b, skiprows=2)
         df_b.columns = ["No", "Kegiatan", "Tipe", "Link", "Tanggal"]
@@ -95,17 +92,13 @@ with st.container():
 
 st.divider()
 
-# --- 6. PANEL ADMIN (URL: ?status=set) ---
+# --- 6. PANEL ADMIN ---
 if is_admin:
     with st.sidebar:
         st.title("🛠️ Editor Admin")
-        with st.expander("📝 Edit Beranda"):
-            store["hero_title"] = st.text_input("Judul", store["hero_title"])
-            store["hero_subtitle"] = st.text_area("Sub-judul", store["hero_subtitle"])
-        with st.expander("🏛️ Edit Potensi"):
-            store["potensi_pertanian"] = st.text_area("Teks Pertanian", store["potensi_pertanian"])
-            store["potensi_pariwisata"] = st.text_area("Teks Pariwisata", store["potensi_pariwisata"])
-        st.success("Mode Admin Aktif")
+        store["hero_title"] = st.text_input("Judul", store["hero_title"])
+        store["potensi_pertanian"] = st.text_area("Teks Pertanian", store["potensi_pertanian"])
+        store["potensi_pariwisata"] = st.text_area("Teks Pariwisata", store["potensi_pariwisata"])
 
 # --- 7. LOGIKA HALAMAN ---
 
@@ -118,47 +111,46 @@ if st.session_state.page == "Beranda":
     st.markdown(f"## {store['hero_title']}")
     st.info(store["hero_subtitle"])
     if os.path.exists("IMG_20251125_111048.jpg"):
-        st.image("IMG_20251125_111048.jpg", use_container_width=True, caption="Dokumentasi Kegiatan")
+        st.image("IMG_20251125_111048.jpg", use_container_width=True)
 
 elif st.session_state.page == "Harga":
     st.subheader("🛍️ Pantauan Harga Komoditas")
     for _, r in df_harga.iterrows():
         if r['SATUAN'] == 0 or pd.isna(r['SATUAN']): 
             st.markdown(f"### 📂 {r['KOMODITAS']}"); continue
-        st.markdown(f"""
-        <div class="price-card">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div style="flex: 1.2;"><b>{r['KOMODITAS']}</b><br><small>{r['SATUAN']}</small></div>
-                <div class="price-col" style="flex: 1;"><small>BESAR</small><br>{format_price_ui(r['B_INI'], r['B_KMRN'])}</div>
-                <div class="price-col" style="flex: 1;"><small>KECIL</small><br>{format_price_ui(r['K_INI'], r['K_KMRN'])}</div>
-            </div>
-        </div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="price-card"><div style="display: flex; justify-content: space-between;">
+            <div style="flex: 1.2;"><b>{r['KOMODITAS']}</b><br><small>{r['SATUAN']}</small></div>
+            <div style="flex: 1; text-align:center;"><small>BESAR</small><br>{format_price_ui(r['B_INI'], r['B_KMRN'])}</div>
+            <div style="flex: 1; text-align:center;"><small>KECIL</small><br>{format_price_ui(r['K_INI'], r['K_KMRN'])}</div>
+        </div></div>""", unsafe_allow_html=True)
 
 elif st.session_state.page == "Media & Berita":
     st.subheader("📰 Media & Berita Terkini")
     if not df_berita.empty:
         for _, row in df_berita.iloc[::-1].iterrows():
-            st.markdown(f"""<div class="news-card">
-                <small style="color:#059669; font-weight:bold;">{row['Tipe']}</small>
-                <h3 style="margin:5px 0;">{row['Kegiatan']}</h3>
-                <p style="font-size:0.9rem; color:gray;">📅 {row['Tanggal']}</p>
-            </div>""", unsafe_allow_html=True)
-            link = str(row['Link']).strip()
-            if link.startswith("http"):
-                if any(ext in link.lower() for ext in ['.jpg', '.png', '.jpeg']): st.image(link, use_container_width=True)
-                st.markdown(f'<a href="{link}" target="_blank" style="text-decoration:none; background:#059669; color:white; padding:8px 15px; border-radius:8px;">🔗 Lihat Detail</a>', unsafe_allow_html=True)
-            st.divider()
+            st.markdown(f'<div class="news-card"><b>{row["Tipe"]}</b><br><h3>{row["Kegiatan"]}</h3><small>{row["Tanggal"]}</small></div>', unsafe_allow_html=True)
+            if "http" in str(row['Link']): st.markdown(f"[🔗 Baca Berita]({row['Link']})")
 
 elif st.session_state.page == "Potensi":
     st.subheader("🏛️ Potensi Unggulan Daerah")
     t1, t2 = st.tabs(["🌾 Pertanian", "🏞️ Pariwisata"])
+    
     with t1:
-        if os.path.exists("potensi_tani.jpg"):
-            st.image("potensi_tani.jpg", use_container_width=True)
+        col1, col2 = st.columns(2)
+        with col1:
+            if os.path.exists("cengkeh.jpeg"): st.image("cengkeh.jpeg", caption="Potensi Cengkeh Ngada")
+        with col2:
+            if os.path.exists("sawah ngada.webp"): st.image("sawah ngada.webp", caption="Lahan Pertanian")
         st.write(store["potensi_pertanian"])
+        if os.path.exists("tanah-kebun-kopi-dan-cengkeh-siap-panen-.webp"):
+            st.image("tanah-kebun-kopi-dan-cengkeh-siap-panen-.webp", use_container_width=True)
+
     with t2:
-        if os.path.exists("potensi_wisata.jpg"):
-            st.image("potensi_wisata.jpg", use_container_width=True)
+        col3, col4 = st.columns(2)
+        with col3:
+            if os.path.exists("bena.webp"): st.image("bena.webp", caption="Kampung Adat Bena")
+        with col4:
+            if os.path.exists("17 pulau riung.webp"): st.image("17 pulau riung.webp", caption="Taman Laut 17 Pulau Riung")
         st.write(store["potensi_pariwisata"])
 
 elif st.session_state.page == "Tren":
@@ -170,4 +162,4 @@ elif st.session_state.page == "Tren":
 
 elif st.session_state.page == "Tentang": st.write(store["about_text"])
 elif st.session_state.page == "Unduhan":
-    st.download_button("📥 Download CSV Harga", df_harga.to_csv(index=False), "harga_ngada.csv", use_container_width=True)
+    st.download_button("📥 Download CSV", df_harga.to_csv(index=False), "harga_ngada.csv", use_container_width=True)
