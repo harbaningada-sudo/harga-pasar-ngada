@@ -14,7 +14,7 @@ def init_data():
         "hero_title": "Smart Economy Ngada 👋",
         "hero_subtitle": "Pelayanan transparan terhadap harga komoditas bagi masyarakat Ngada.",
         "about_content": "Bagian Perekonomian & SDA Setda Ngada berkomitmen menyediakan data akurat untuk menjaga stabilitas ekonomi daerah.",
-        "tren_publikasi": [] # Menyimpan komoditas yang dipilih admin untuk tampil di grafik
+        "tren_publikasi": [] 
     }
 
 store = init_data()
@@ -31,13 +31,39 @@ def navigasi(target):
 st.markdown("""
     <style>
     .stApp { background-color: #F0FDF4 !important; }
-    .hero-box { background: linear-gradient(135deg, #059669 0%, #15803D 100%); padding: 40px; border-radius: 20px; text-align: center; color: white !important; margin-bottom: 25px; }
-    .menu-card { background: white; border: 1px solid #DCFCE7; padding: 20px; border-radius: 15px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-    .price-card { background: white; padding: 15px; border-radius: 12px; border: 1px solid #E2E8F0; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+    .hero-box { 
+        background: linear-gradient(135deg, #059669 0%, #15803D 100%); 
+        padding: 40px; border-radius: 20px; text-align: center; color: white !important; 
+        margin-bottom: 25px; 
+    }
+    .menu-card { 
+        background: white; border: 1px solid #DCFCE7; padding: 20px; 
+        border-radius: 15px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
+    }
+    .price-card { 
+        background: white; padding: 15px; border-radius: 12px; border: 1px solid #E2E8F0; 
+        margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; 
+    }
+    /* Style Logo Beranda Tengah */
+    .logo-center {
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+        width: 100px;
+        margin-bottom: 15px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. DATA LOADER ---
+# --- 4. IMAGE HELPER ---
+def get_img_as_base64(file):
+    try:
+        with open(file, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    except:
+        return None
+
+# --- 5. DATA LOADER ---
 @st.cache_data(ttl=60)
 def load_all_data():
     try:
@@ -46,7 +72,7 @@ def load_all_data():
         df_h = pd.read_csv(url_h, skiprows=1).iloc[:, [0, 1, 2, 3, 4, 5]]
         df_h.columns = ['KOMODITAS', 'SATUAN', 'B_KMRN', 'B_INI', 'K_KMRN', 'K_INI']
         
-        # Data Berita (GID Berbeda sesuai file Anda)
+        # Data Berita
         url_b = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT2LMrwn5xk782uKyRGkeOzCXt3DDK-iBxe_F8RUkI7Zk4iYgMVcE_f0XbSc8R72Q/pub?gid=201409714&single=true&output=csv"
         df_b = pd.read_csv(url_b, skiprows=2)
         df_b.columns = ["No", "Kegiatan", "Tipe", "Link", "Tanggal"]
@@ -57,7 +83,7 @@ def load_all_data():
 
 df_harga, df_berita = load_all_data()
 
-# --- 5. SIDEBAR ---
+# --- 6. SIDEBAR ---
 with st.sidebar:
     st.markdown("<h3 style='text-align:center;'>🏛️ KABUPATEN NGADA</h3>", unsafe_allow_html=True)
     if os.path.exists("Bupati-dan-Wakil-Bupati-Ngada-jpg.jpeg"):
@@ -68,12 +94,26 @@ with st.sidebar:
         st.warning("MODE EDITOR AKTIF")
         if st.button("🛠️ Panel Admin Konten", use_container_width=True): navigasi("Admin")
 
-# --- 6. LOGIKA HALAMAN ---
+# --- 7. LOGIKA HALAMAN ---
 
 # A. BERANDA
 if st.session_state.halaman_aktif == "Beranda":
+    # 1. Menampilkan Logo Pemda di Atas
+    logo_data = get_img_as_base64("logo-ngada.png")
+    if logo_data:
+        st.markdown(f'<img src="data:image/png;base64,{logo_data}" class="logo-center">', unsafe_allow_html=True)
+
+    # 2. Hero Section
     st.markdown(f'<div class="hero-box"><h1>{store["hero_title"]}</h1><p>{store["hero_subtitle"]}</p></div>', unsafe_allow_html=True)
     
+    # 3. Foto Operasi Pasar (Utama)
+    if os.path.exists("IMG_20251125_111048.jpg"):
+        st.image("IMG_20251125_111048.jpg", use_container_width=True, caption="Kegiatan Operasi Pasar Kabupaten Ngada")
+    
+    st.divider()
+    st.markdown("<h3 style='text-align:center;'>🎯 Menu Layanan Digital</h3>", unsafe_allow_html=True)
+    
+    # Grid Menu
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown('<div class="menu-card"><h2>🛍️</h2><h4>Harga Komoditas</h4></div>', unsafe_allow_html=True)
@@ -104,7 +144,7 @@ elif st.session_state.halaman_aktif == "Harga":
         if pd.isna(r['SATUAN']): st.markdown(f"### 📂 {r['KOMODITAS']}"); continue
         st.markdown(f'<div class="price-card"><b>{r["KOMODITAS"]} ({r["SATUAN"]})</b> <span>Besar: Rp {r["B_INI"]} | Kecil: Rp {r["K_INI"]}</span></div>', unsafe_allow_html=True)
 
-# C. TREN (Hanya tampil yang dipublikasikan Admin)
+# [Halaman C sampai H tetap sama seperti sebelumnya...]
 elif st.session_state.halaman_aktif == "Tren":
     st.header("📈 Tren Fluktuasi Harga")
     if st.button("⬅️ Kembali"): navigasi("Beranda")
@@ -115,7 +155,6 @@ elif st.session_state.halaman_aktif == "Tren":
     else:
         st.info("Belum ada data tren yang dipublikasikan oleh Admin.")
 
-# D. MEDIA & BERITA
 elif st.session_state.halaman_aktif == "Berita":
     st.header("📰 Media & Berita Terkini")
     if st.button("⬅️ Kembali"): navigasi("Beranda")
@@ -126,41 +165,33 @@ elif st.session_state.halaman_aktif == "Berita":
             if str(r['Link']).startswith("http"):
                 st.link_button("Baca Selengkapnya / Lihat Foto", r['Link'])
 
-# E. PUSAT UNDUHAN
 elif st.session_state.halaman_aktif == "Unduhan":
     st.header("📥 Pusat Unduhan Data")
     if st.button("⬅️ Kembali"): navigasi("Beranda")
     st.download_button("Download Data Harga (CSV)", df_harga.to_csv().encode('utf-8'), "Harga_Ngada.csv")
     st.download_button("Download Data Berita (CSV)", df_berita.to_csv().encode('utf-8'), "Berita_Ngada.csv")
 
-# F. TENTANG KITA
 elif st.session_state.halaman_aktif == "Tentang":
     st.header("ℹ️ Tentang Kita")
     if st.button("⬅️ Kembali"): navigasi("Beranda")
     st.write(store["about_content"])
 
-# G. POTENSI DAERAH
 elif st.session_state.halaman_aktif == "Potensi":
     st.header("🏛️ Potensi Ekonomi Daerah")
     if st.button("⬅️ Kembali"): navigasi("Beranda")
     st.write("Informasi mengenai potensi Sumber Daya Alam dan Ekonomi Unggulan Kabupaten Ngada.")
 
-# H. PANEL ADMIN (URL: ?status=set)
 elif st.session_state.halaman_aktif == "Admin":
     st.header("🛠️ Panel Editor Admin")
-    
     tab1, tab2, tab3 = st.tabs(["Publikasi Tren", "Edit Beranda", "Edit Tentang Kita"])
-    
     with tab1:
         st.subheader("Pilih Komoditas untuk Tampil di Grafik Publik")
         store["tren_publikasi"] = st.multiselect("Pilih:", df_harga['KOMODITAS'].unique(), default=store["tren_publikasi"])
         if st.button("Simpan Publikasi Tren"): st.success("Tren diperbarui!")
-
     with tab2:
         store["hero_title"] = st.text_input("Judul Beranda:", store["hero_title"])
         store["hero_subtitle"] = st.text_area("Sub-judul Beranda:", store["hero_subtitle"])
         if st.button("Update Beranda"): st.success("Beranda diperbarui!")
-
     with tab3:
         store["about_content"] = st.text_area("Konten Tentang Kita:", store["about_content"])
         if st.button("Update Profil"): st.success("Halaman Tentang Kita diperbarui!")
