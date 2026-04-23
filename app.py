@@ -12,189 +12,172 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- 2. LOGIKA NAVIGASI (Sangat Penting) ---
+# --- 2. LOGIKA NAVIGASI & MEMORI ---
 if 'halaman_aktif' not in st.session_state:
     st.session_state.halaman_aktif = "Beranda"
 
-# Fungsi ganti halaman
-def ganti_ke(nama_halaman):
-    st.session_state.halaman_aktif = nama_halaman
+def pindah_ke(nama):
+    st.session_state.halaman_aktif = nama
+    st.rerun()
 
-# Data dummy/settings sederhana
-hero_title = "Smart Economy Ngada 👋"
-hero_subtitle = "Pelayanan transparan terhadap harga komoditas bagi masyarakat Ngada."
-
-# --- 3. CSS KUSTOM (WARNA HIJAU & HARGA RINCI) ---
+# --- 3. CSS KUSTOM (HIJAU NGADA & ANTI-ERROR) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
-    
-    /* Background Full Hijau */
     .stApp { background-color: #F0FDF4 !important; }
-    
     html, body, [class*="css"], .stMarkdown, p, span, div, label { 
         font-family: 'Inter', sans-serif; color: #1E293B !important; 
     }
-
-    /* Hero Section */
-    .hero-section {
+    
+    /* Hero & Card Styles */
+    .hero-box {
         background: linear-gradient(135deg, #059669 0%, #15803D 100%);
-        padding: 40px; border-radius: 20px; text-align: center; color: white !important;
-        margin-bottom: 30px;
+        padding: 40px; border-radius: 20px; text-align: center; color: white !important; margin-bottom: 30px;
     }
-    .hero-section h1 { color: white !important; font-weight: 800; }
-    .hero-section p { color: white !important; }
+    .hero-box h1 { color: white !important; font-weight: 800; margin-bottom: 10px; }
+    .hero-box p { color: #DCFCE7 !important; }
 
-    /* Menu Card di Tengah */
-    .menu-card-box {
-        background: white; border: 1px solid #DCFCE7;
-        padding: 25px; border-radius: 20px; text-align: center;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    .menu-card {
+        background: white; border: 1px solid #DCFCE7; padding: 25px; border-radius: 20px; 
+        text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.03); min-height: 200px;
     }
 
-    /* Kartu Harga Rinci */
-    .price-card {
+    /* Price Card Detail */
+    .price-container {
         background: white !important; padding: 20px; border-radius: 15px;
         border: 1px solid #E2E8F0; margin-bottom: 12px;
         display: flex; justify-content: space-between; align-items: center;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    .price-group { text-align: center; flex: 1; }
-    .price-label { font-size: 0.7rem; color: #64748B; text-transform: uppercase; font-weight: 700; margin-bottom: 5px; }
-    .price-value { font-size: 1.3rem; font-weight: 800; color: #059669; }
+    .price-col { text-align: center; flex: 1; }
+    .label-mini { font-size: 0.7rem; color: #64748B; font-weight: 700; text-transform: uppercase; }
+    .val-price { font-size: 1.25rem; font-weight: 800; color: #059669; }
     
-    .group-header {
-        background: #059669 !important; color: white !important; 
-        padding: 10px 20px; border-radius: 10px; margin: 20px 0 10px 0; font-weight: 700;
+    .cat-header {
+        background: #059669; color: white; padding: 10px 20px; border-radius: 10px; 
+        margin-top: 25px; font-weight: 700;
     }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 4. IMAGE HELPER ---
-def get_img_as_base64(file):
+def get_img_base64(file):
     try:
         with open(file, "rb") as f: return base64.b64encode(f.read()).decode()
     except: return ""
 
-# --- 5. MUAT DATA ---
+# --- 5. DATA LOADER (DENGAN PROTEKSI ERROR) ---
 @st.cache_data(ttl=60)
-def load_all_data():
+def load_data():
     try:
-        url_h = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR54g3RrvlqqZ3ppTrKiKK-L1fVT8YSvnXfihtO-H795s0KQ6H_TewZLFFAXPi-ktMizomg3JHdIIjI/pub?gid=929993273&single=true&output=csv"
-        df_h = pd.read_csv(url_h, skiprows=1)
-        df_h = df_h.iloc[:, [0, 1, 2, 3, 4, 5]]
-        df_h.columns = ['KOMODITAS', 'SATUAN', 'BESAR_KMRN', 'BESAR_INI', 'KECIL_KMRN', 'KECIL_INI']
-        return df_h.dropna(subset=['KOMODITAS'])
+        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR54g3RrvlqqZ3ppTrKiKK-L1fVT8YSvnXfihtO-H795s0KQ6H_TewZLFFAXPi-ktMizomg3JHdIIjI/pub?gid=929993273&single=true&output=csv"
+        df = pd.read_csv(url, skiprows=1)
+        df = df.iloc[:, [0, 1, 2, 3, 4, 5]]
+        df.columns = ['KOMODITAS', 'SATUAN', 'B_KMRN', 'B_INI', 'K_KMRN', 'K_INI']
+        return df.dropna(subset=['KOMODITAS'])
     except:
         return pd.DataFrame()
 
-df_harga = load_all_data()
+df_harga = load_data()
 
-# --- 6. SIDEBAR (Logo + Foto Pimpinan) ---
+# --- 6. SIDEBAR (LOGO & PIMPINAN) ---
 with st.sidebar:
-    # Logo Kabupaten Ngada
-    logo_ngada = get_img_as_base64("logo-ngada.png")
-    if logo_ngada:
-        st.markdown(f'<center><img src="data:image/png;base64,{logo_ngada}" width="80"></center>', unsafe_allow_html=True)
-    st.markdown("<h3 style='text-align:center;'>KABUPATEN NGADA</h3>", unsafe_allow_html=True)
-
-    # Foto Pimpinan
-    img_p = get_img_as_base64("Bupati-dan-Wakil-Bupati-Ngada-jpg.jpeg")
-    if img_p:
-        st.image(f"data:image/jpeg;base64,{img_p}", use_container_width=True)
+    logo = get_img_base64("logo-ngada.png")
+    if logo: st.markdown(f'<center><img src="data:image/png;base64,{logo}" width="70"></center>', unsafe_allow_html=True)
+    st.markdown("<h4 style='text-align:center;'>KABUPATEN NGADA</h4>", unsafe_allow_html=True)
     
-    st.info("Bagian Perekonomian & SDA Setda Ngada")
+    foto = get_img_base64("Bupati-dan-Wakil-Bupati-Ngada-jpg.jpeg")
+    if foto: st.image(f"data:image/jpeg;base64,{foto}", use_container_width=True)
     
-    # Navigasi Cadangan di Sidebar
+    st.success("Bagian Perekonomian & SDA")
     st.divider()
-    if st.button("🏠 Beranda Utama", use_container_width=True): ganti_ke("Beranda")
+    if st.button("🏠 Beranda Utama", use_container_width=True): pindah_ke("Beranda")
 
-# --- 7. TAMPILAN HALAMAN (LOGIKA UTAMA) ---
+# --- 7. LOGIKA HALAMAN ---
 
-# HALAMAN BERANDA
+# A. HALAMAN BERANDA (SEMUA NAVIGASI DI SINI)
 if st.session_state.halaman_aktif == "Beranda":
-    st.markdown(f'<div class="hero-section"><h1>{hero_title}</h1><p>{hero_subtitle}</p></div>', unsafe_allow_html=True)
-    
-    # Foto Operasi Pasar
-    file_foto_pasar = "IMG_20251125_111048.jpg"
-    if os.path.exists(file_foto_pasar):
-        st.image(file_foto_pasar, use_container_width=True, caption="Kegiatan Operasi Pasar Kabupaten Ngada")
-    
-    st.divider()
+    st.markdown("""
+        <div class="hero-box">
+            <h1>Smart Economy Ngada 👋</h1>
+            <p>Pelayanan transparan terhadap harga komoditas bagi masyarakat Ngada.</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # Grid 6 Menu Utama
     st.markdown("<h3 style='text-align:center;'>🎯 Menu Layanan Digital</h3>", unsafe_allow_html=True)
     
-    # Grid Menu di Tengah
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown('<div class="menu-card-box"><h2>🛍️</h2><h4>Harga Komoditas</h4><p>Pedagang Besar & Kecil</p></div>', unsafe_allow_html=True)
-        if st.button("Buka Harga Pasar", key="nav_h", use_container_width=True):
-            ganti_ke("Harga")
-            st.rerun()
-    with col2:
-        st.markdown('<div class="menu-card-box"><h2>📈</h2><h4>Tren Ekonomi</h4><p>Grafik fluktuasi harga</p></div>', unsafe_allow_html=True)
-        if st.button("Buka Tren Harga", key="nav_t", use_container_width=True):
-            ganti_ke("Tren")
-            st.rerun()
-    with col3:
-        st.markdown('<div class="menu-card-box"><h2>📰</h2><h4>Media Berita</h4><p>Kegiatan Perekonomian</p></div>', unsafe_allow_html=True)
-        if st.button("Buka Berita", key="nav_b", use_container_width=True):
-            ganti_ke("Berita")
-            st.rerun()
+    m1, m2, m3 = st.columns(3)
+    with m1:
+        st.markdown('<div class="menu-card"><h2>🛍️</h2><h4>Harga Komoditas</h4><p>Pedagang Besar & Kecil</p></div>', unsafe_allow_html=True)
+        if st.button("Buka Harga", key="btn1", use_container_width=True): pindah_ke("Harga")
+    with m2:
+        st.markdown('<div class="menu-card"><h2>📈</h2><h4>Tren Ekonomi</h4><p>Statistik perkembangan</p></div>', unsafe_allow_html=True)
+        if st.button("Buka Tren", key="btn2", use_container_width=True): pindah_ke("Tren")
+    with m3:
+        st.markdown('<div class="menu-card"><h2>📰</h2><h4>Media & Berita</h4><p>Info kegiatan terkini</p></div>', unsafe_allow_html=True)
+        if st.button("Buka Berita", key="btn3", use_container_width=True): pindah_ke("Berita")
 
-# HALAMAN HARGA (Rinci Besar vs Kecil)
+    m4, m5, m6 = st.columns(3)
+    with m4:
+        st.markdown('<div class="menu-card"><h2>📥</h2><h4>Pusat Unduhan</h4><p>Data & Dokumen</p></div>', unsafe_allow_html=True)
+        if st.button("Buka Unduhan", key="btn4", use_container_width=True): pindah_ke("Unduhan")
+    with m5:
+        st.markdown('<div class="menu-card"><h2>ℹ️</h2><h4>Tentang Kita</h4><p>Profil & Komitmen</p></div>', unsafe_allow_html=True)
+        if st.button("Buka Info", key="btn5", use_container_width=True): pindah_ke("Tentang")
+    with m6:
+        st.markdown('<div class="menu-card"><h2>🏛️</h2><h4>SDA Ngada</h4><p>Potensi Daerah</p></div>', unsafe_allow_html=True)
+        st.button("Segera Hadir", key="btn6", use_container_width=True, disabled=True)
+
+# B. HALAMAN HARGA (DENGAN PROTEKSI VALUEERROR)
 elif st.session_state.halaman_aktif == "Harga":
-    st.markdown("## 🛍️ Rincian Harga Komoditas")
-    if st.button("⬅️ Kembali ke Menu Utama"):
-        ganti_ke("Beranda")
-        st.rerun()
+    st.header("🛍️ Daftar Harga Komoditas")
+    if st.button("⬅️ Kembali ke Menu"): pindah_ke("Beranda")
     
     search = st.text_input("🔍 Cari komoditas...")
-    df_show = df_harga.copy()
-    if search:
-        df_show = df_show[df_show['KOMODITAS'].str.contains(search, case=False, na=False)]
+    df_f = df_harga.copy()
+    if search: df_f = df_f[df_f['KOMODITAS'].str.contains(search, case=False, na=False)]
 
-    for _, row in df_show.iterrows():
-        # Kategori/Grup
+    for _, row in df_f.iterrows():
+        # Handle Kategori
         if pd.isna(row['SATUAN']) or str(row['SATUAN']).strip() == "":
-            st.markdown(f'<div class="group-header">📂 {row["KOMODITAS"]}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="cat-header">📂 {row["KOMODITAS"]}</div>', unsafe_allow_html=True)
             continue
         
-        # Ambil Angka
-        b_ini = int(pd.to_numeric(row['BESAR_INI'], errors='coerce') or 0)
-        k_ini = int(pd.to_numeric(row['KECIL_INI'], errors='coerce') or 0)
-        k_kmrn = int(pd.to_numeric(row['KECIL_KMRN'], errors='coerce') or 0)
+        # PROTEKSI DATA (Supaya tidak ValueError)
+        def clean_val(val):
+            try:
+                v = pd.to_numeric(val, errors='coerce')
+                return int(v) if not pd.isna(v) else 0
+            except: return 0
+
+        b_ini = clean_val(row['B_INI'])
+        k_ini = clean_val(row['K_INI'])
+        k_kmrn = clean_val(row['K_KMRN'])
         selisih = k_ini - k_kmrn
+        
         warna = "#DC2626" if selisih > 0 else "#059669" if selisih < 0 else "#64748B"
         ikon = "▲" if selisih > 0 else "▼" if selisih < 0 else "—"
 
-        # Tampilan HTML Kartu Rinci (Besar vs Kecil)
         st.markdown(f"""
-        <div class="price-card" style="border-left: 8px solid {warna};">
+        <div class="price-container" style="border-left: 8px solid {warna};">
             <div style="flex: 1.5;">
                 <b style="font-size: 1.1rem;">{row['KOMODITAS']}</b><br>
-                <small>Satuan: {row['SATUAN']}</small>
+                <small style="color: #64748B;">Satuan: {row['SATUAN']}</small>
             </div>
-            <div class="price-group">
-                <div class="price-label">Pedagang Besar</div>
-                <div class="price-value" style="color: #1E293B;">Rp {b_ini:,}</div>
+            <div class="price-col">
+                <div class="label-mini">Pedagang Besar</div>
+                <div class="val-price" style="color: #1E293B;">Rp {b_ini:,}</div>
             </div>
-            <div class="price-group" style="border-left: 2px solid #F1F5F9;">
-                <div class="price-label">Pedagang Kecil</div>
-                <div class="price-value" style="color: {warna};">Rp {k_ini:,}</div>
-                <div style="font-size: 0.8rem; font-weight: 700; color: {warna};">
-                    {ikon} {abs(selisih):,}
-                </div>
+            <div class="price-col" style="border-left: 2px solid #F1F5F9;">
+                <div class="label-mini">Pedagang Kecil</div>
+                <div class="val-price" style="color: {warna};">Rp {k_ini:,}</div>
+                <div style="font-size: 0.8rem; font-weight: 700; color: {warna};">{ikon} {abs(selisih):,}</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-# HALAMAN TREN/BERITA (Placeholder)
-elif st.session_state.halaman_aktif == "Tren":
-    st.header("📈 Tren Fluktuasi Harga")
-    if st.button("⬅️ Kembali"): ganti_ke("Beranda"); st.rerun()
-    st.info("Halaman Tren sedang memuat data grafik...")
-
-elif st.session_state.halaman_aktif == "Berita":
-    st.header("📰 Media & Berita Terkini")
-    if st.button("⬅️ Kembali"): ganti_ke("Beranda"); st.rerun()
-    st.info("Daftar berita kegiatan sedang diperbarui...")
+# Halaman lainnya (Placeholder agar tidak kosong)
+elif st.session_state.halaman_aktif in ["Tren", "Berita", "Unduhan", "Tentang"]:
+    st.header(f"📍 Halaman {st.session_state.halaman_aktif}")
+    if st.button("⬅️ Kembali ke Menu"): pindah_ke("Beranda")
+    st.info(f"Fitur {st.session_state.halaman_aktif} sedang dalam sinkronisasi data.")
