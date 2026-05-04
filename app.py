@@ -3,23 +3,40 @@ import pandas as pd
 import plotly.express as px
 import os
 import base64
+import json
 
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(page_title="Portal Ekonomi Ngada", page_icon="🏛️", layout="wide", initial_sidebar_state="collapsed")
 
-# --- 2. SISTEM MEMORI (EDITABLE) ---
-@st.cache_resource
-def init_data():
-    return {
-        "hero_title": "Smart Economy Ngada 👋",
-        "hero_subtitle": "Data harga komoditas akurat untuk masyarakat Ngada.",
-        "about_text": "Bagian Perekonomian & SDA Setda Ngada berkomitmen menjaga stabilitas harga daerah.",
-        "potensi_pertanian": "Ngada unggul di sektor Kopi Arabika, Cengkeh, dan Pertanian Hortikultura.",
-        "potensi_pariwisata": "Destinasi ikonik meliputi Kampung Adat Bena dan Taman Laut 17 Pulau Riung.",
-        "tren_pilihan": [] 
-    }
+# --- 2. SISTEM MEMORI PERSISTEN (FILE JSON) ---
+DATA_FILE = "store_data.json"
 
-store = init_data()
+DEFAULT_DATA = {
+    "hero_title": "Smart Economy Ngada 👋",
+    "hero_subtitle": "Data harga komoditas akurat untuk masyarakat Ngada.",
+    "about_text": "Bagian Perekonomian & SDA Setda Ngada berkomitmen menjaga stabilitas harga daerah.",
+    "potensi_pertanian": "Ngada unggul di sektor Kopi Arabika, Cengkeh, dan Pertanian Hortikultura.",
+    "potensi_pariwisata": "Destinasi ikonik meliputi Kampung Adat Bena dan Taman Laut 17 Pulau Riung.",
+    "tren_pilihan": []
+}
+
+def load_store():
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r") as f:
+            data = json.load(f)
+        # Merge dengan default agar key baru tidak hilang
+        return {**DEFAULT_DATA, **data}
+    return DEFAULT_DATA.copy()
+
+def save_store(data):
+    with open(DATA_FILE, "w") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+# Load ke session_state hanya sekali saat pertama kali
+if 'store' not in st.session_state:
+    st.session_state.store = load_store()
+
+store = st.session_state.store
 is_admin = st.query_params.get("status") == "set"
 
 if 'page' not in st.session_state:
@@ -123,7 +140,11 @@ if is_admin:
         
         with st.expander("📈 Edit Grafik Tren"):
             all_items = df_harga['KOMODITAS'].unique().tolist() if not df_harga.empty else []
-            store["tren_pilihan"] = st.multiselect("Pilih Komoditas", all_items, default=store["tren_pilihan"] if store["tren_pilihan"] else all_items[:5])
+            store["tren_pilihan"] = st.multiselect(
+                "Pilih Komoditas",
+                all_items,
+                default=[x for x in store["tren_pilihan"] if x in all_items] if store["tren_pilihan"] else all_items[:5]
+            )
             
         with st.expander("🏛️ Edit Potensi"):
             store["potensi_pertanian"] = st.text_area("Teks Pertanian", store["potensi_pertanian"])
@@ -131,7 +152,22 @@ if is_admin:
             
         with st.expander("ℹ️ Edit Tentang"):
             store["about_text"] = st.text_area("Konten Tentang", store["about_text"])
-            
+
+        st.divider()
+
+        # ✅ TOMBOL SIMPAN PERMANEN KE FILE JSON
+        if st.button("💾 Simpan Semua Perubahan", use_container_width=True, type="primary"):
+            save_store(store)
+            st.success("✅ Data berhasil disimpan!")
+            st.rerun()
+
+        # Tombol reset ke default
+        if st.button("🔄 Reset ke Default", use_container_width=True):
+            save_store(DEFAULT_DATA)
+            st.session_state.store = DEFAULT_DATA.copy()
+            st.warning("⚠️ Data direset ke default!")
+            st.rerun()
+
         st.success("Mode Admin Aktif")
 
 # --- 7. LOGIKA HALAMAN ---
