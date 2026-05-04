@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 import os
 import base64
-import json  # Tambahkan ini untuk simpan file
+import json
 
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(page_title="Portal Ekonomi Ngada", page_icon="🏛️", layout="wide", initial_sidebar_state="collapsed")
@@ -12,7 +12,6 @@ st.set_page_config(page_title="Portal Ekonomi Ngada", page_icon="🏛️", layou
 DB_FILE = "settings_db.json"
 
 def load_settings():
-    # Data default jika file belum ada
     default_data = {
         "hero_title": "Smart Economy Ngada 👋",
         "hero_subtitle": "Data harga komoditas akurat untuk masyarakat Ngada.",
@@ -26,7 +25,6 @@ def load_settings():
         try:
             with open(DB_FILE, "r") as f:
                 saved_data = json.load(f)
-                # Pastikan semua key ada (sinkronisasi data lama & baru)
                 for key, value in default_data.items():
                     if key not in saved_data:
                         saved_data[key] = value
@@ -39,7 +37,6 @@ def save_settings(data):
     with open(DB_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-# Inisialisasi store ke session state agar reaktif saat edit
 if "store" not in st.session_state:
     st.session_state.store = load_settings()
 
@@ -121,36 +118,30 @@ with st.container():
         if m[i].button(p, key=f"nav_{p}", use_container_width=True): st.session_state.page = p
 st.divider()
 
-# --- 6. PANEL ADMIN DENGAN TOMBOL SIMPAN PERMANEN ---
+# --- 6. PANEL ADMIN ---
 if is_admin:
     with st.sidebar:
         st.header("🛠️ Panel Editor Admin")
-        
-        # Gunakan session_state agar input langsung tersinkron
         with st.expander("🏠 Edit Beranda", expanded=True):
             st.session_state.store["hero_title"] = st.text_input("Judul Utama", st.session_state.store["hero_title"])
             st.session_state.store["hero_subtitle"] = st.text_area("Sub-judul", st.session_state.store["hero_subtitle"])
-        
         with st.expander("📈 Edit Grafik Tren"):
             all_items = df_harga['KOMODITAS'].unique().tolist() if not df_harga.empty else []
             st.session_state.store["tren_pilihan"] = st.multiselect("Pilih Komoditas", all_items, default=st.session_state.store["tren_pilihan"])
-            
         with st.expander("🏛️ Edit Potensi"):
             st.session_state.store["potensi_pertanian"] = st.text_area("Teks Pertanian", st.session_state.store["potensi_pertanian"])
             st.session_state.store["potensi_pariwisata"] = st.text_area("Teks Pariwisata", st.session_state.store["potensi_pariwisata"])
-            
         with st.expander("ℹ️ Edit Tentang"):
             st.session_state.store["about_text"] = st.text_area("Konten Tentang", st.session_state.store["about_text"])
             
         st.divider()
-        # TOMBOL KERAMAT
         if st.button("💾 SIMPAN PERMANEN", use_container_width=True, type="primary"):
             save_settings(st.session_state.store)
             st.success("Perubahan Disimpan ke Database!")
             st.balloons()
 
 # --- 7. LOGIKA HALAMAN ---
-store = st.session_state.store # Ambil data dari state
+store = st.session_state.store
 
 def format_price(ini, kmrn):
     diff = ini - kmrn
@@ -163,7 +154,6 @@ if st.session_state.page == "Beranda":
     st.info(store["hero_subtitle"])
     if os.path.exists("IMG_20251125_111048.jpg"): st.image("IMG_20251125_111048.jpg", use_container_width=True)
 
-# ... (Sisa logika halaman Harga, Tren, dll tetap sama menggunakan variabel 'store')
 elif st.session_state.page == "Harga":
     st.markdown("### 🛍️ Pantauan Harga")
     query = st.text_input("🔍 Cari Nama Komoditas...", "").lower()
@@ -198,8 +188,18 @@ elif st.session_state.page == "Potensi":
     st.subheader("🏛️ Potensi Daerah")
     t1, t2 = st.tabs(["🌾 Pertanian", "🏞️ Pariwisata"])
     with t1:
+        col1, col2 = st.columns(2)
+        with col1:
+            if os.path.exists("cengkeh.jpeg"): st.image("cengkeh.jpeg", caption="Komoditas Cengkeh Ngada", use_container_width=True)
+        with col2:
+            if os.path.exists("sawah ngada.webp"): st.image("sawah ngada.webp", caption="Lahan Pertanian Ngada", use_container_width=True)
         st.write(store["potensi_pertanian"])
     with t2:
+        col3, col4 = st.columns(2)
+        with col3:
+            if os.path.exists("bena.webp"): st.image("bena.webp", caption="Kampung Adat Bena", use_container_width=True)
+        with col4:
+            if os.path.exists("17 pulau riung.webp"): st.image("17 pulau riung.webp", caption="Taman Laut 17 Pulau Riung", use_container_width=True)
         st.write(store["potensi_pariwisata"])
 
 elif st.session_state.page == "Tentang":
