@@ -110,11 +110,11 @@ with st.container():
         if m[i].button(p, key=f"nav_{p}", use_container_width=True): st.session_state.page = p
 st.divider()
 
-# --- 6. PANEL ADMIN (LENGKAP) ---
+# --- 6. PANEL ADMIN (DIPERBAIKI) ---
 if is_admin:
     with st.sidebar:
         st.header("🛠️ Admin Editor")
-        with st.expander("📝 Edit Beranda"):
+        with st.expander("📝 Edit Beranda", expanded=True):
             st.session_state.store["hero_title"] = st.text_input("Judul", st.session_state.store["hero_title"])
             st.session_state.store["hero_subtitle"] = st.text_area("Sub-judul", st.session_state.store["hero_subtitle"])
         
@@ -123,15 +123,15 @@ if is_admin:
             st.session_state.store["tren_pilihan"] = st.multiselect("Pilih Komoditas", all_items, default=st.session_state.store["tren_pilihan"])
             
         with st.expander("🏛️ Edit Potensi"):
-            st.session_state.store["potensi_pertanian"] = st.text_area("Tani", st.session_state.store["potensi_pertanian"])
-            st.session_state.store["potensi_pariwisata"] = st.text_area("Wisata", st.session_state.store["potensi_pariwisata"])
+            st.session_state.store["potensi_pertanian"] = st.text_area("Teks Pertanian", st.session_state.store["potensi_pertanian"])
+            st.session_state.store["potensi_pariwisata"] = st.text_area("Teks Pariwisata", st.session_state.store["potensi_pariwisata"])
             
         with st.expander("ℹ️ Edit Tentang"):
-            st.session_state.store["about_text"] = st.text_area("Konten", st.session_state.store["about_text"])
+            st.session_state.store["about_text"] = st.text_area("Teks Tentang", st.session_state.store["about_text"])
 
         if st.button("💾 SIMPAN PERMANEN", use_container_width=True):
             save_settings(st.session_state.store)
-            st.success("Data Tersimpan!")
+            st.success("Perubahan Berhasil Disimpan!")
 
 # --- 7. FUNGSI TAMPILAN HARGA ---
 def render_price_col(label, ini, kmrn):
@@ -144,10 +144,10 @@ def render_price_col(label, ini, kmrn):
         clr, bg, txt, icon = "#64748B", "#F1F5F9", "STABIL", "—"
     
     return f"""
-    <div style="flex: 1; min-width: 140px; padding: 10px; background: #f8fafc; border-radius: 10px;">
-        <div style="font-weight: bold; font-size: 0.8rem; color: #0369a1; border-bottom: 1px solid #e2e8f0; margin-bottom: 8px;">🏪 {label}</div>
+    <div style="flex: 1; min-width: 150px; padding: 12px; background: #f8fafc; border-radius: 10px;">
+        <div style="font-weight: bold; font-size: 0.85rem; color: #0369a1; border-bottom: 1px solid #e2e8f0; margin-bottom: 8px;">🏪 {label}</div>
         <div style="font-size: 0.75rem; color: #64748B;">Hari Ini:</div>
-        <div style="font-size: 1.1rem; font-weight: bold; color: {clr};">Rp {ini:,}</div>
+        <div style="font-size: 1.15rem; font-weight: bold; color: {clr};">Rp {ini:,}</div>
         <div style="font-size: 0.75rem; color: #64748B; margin-top: 4px;">Kemarin:</div>
         <div style="font-size: 0.9rem; color: #94A3B8; text-decoration: line-through;">Rp {kmrn:,}</div>
         <div class="status-badge" style="background: {bg}; color: {clr};">{icon} {txt}</div>
@@ -176,7 +176,7 @@ elif st.session_state.page == "Harga":
                 st.markdown(f"""
                 <div class="price-card">
                     <div style="display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-start;">
-                        <div style="flex: 1.2; min-width: 180px;">
+                        <div style="flex: 1.2; min-width: 200px;">
                             <div style="font-size: 1.2rem; font-weight: bold;">{r['KOMODITAS']}</div>
                             <div style="color: #64748B; font-size: 0.9rem;">Satuan: {r['SATUAN']}</div>
                         </div>
@@ -187,11 +187,11 @@ elif st.session_state.page == "Harga":
                 """, unsafe_allow_html=True)
 
 elif st.session_state.page == "Media":
-    st.subheader("📰 Media & Berita")
+    st.subheader("📰 Media Berita")
     if not df_berita.empty:
         for _, row in df_berita.iloc[::-1].iterrows():
             with st.expander(f"📅 {row['Tanggal']} - {row['Kegiatan']}"):
-                if "http" in str(row['Link']): st.link_button("Lihat Berita", row['Link'])
+                if "http" in str(row['Link']): st.link_button("Baca Selengkapnya", row['Link'])
 
 elif st.session_state.page == "Tren":
     st.subheader("📈 Tren Harga")
@@ -202,7 +202,7 @@ elif st.session_state.page == "Tren":
         st.plotly_chart(fig, use_container_width=True)
 
 elif st.session_state.page == "Potensi":
-    st.subheader("🏛️ Potensi Daerah")
+    st.subheader("🏛️ Potensi Ekonomi")
     t1, t2 = st.tabs(["🌾 Pertanian", "🏞️ Pariwisata"])
     with t1: st.write(store["potensi_pertanian"])
     with t2: st.write(store["potensi_pariwisata"])
