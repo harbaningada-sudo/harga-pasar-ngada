@@ -8,41 +8,37 @@ import json
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(page_title="Portal Ekonomi Ngada", page_icon="🏛️", layout="wide", initial_sidebar_state="collapsed")
 
-# --- 2. SISTEM MEMORI PERSISTEN (FILE JSON) ---
-DATA_FILE = "store_data.json"
+# --- 2. SISTEM PENYIMPANAN PERMANEN (JSON) ---
+DB_FILE = "settings_db.json"
 
-DEFAULT_DATA = {
-    "hero_title": "Smart Economy Ngada 👋",
-    "hero_subtitle": "Data harga komoditas akurat untuk masyarakat Ngada.",
-    "about_text": "Bagian Perekonomian & SDA Setda Ngada berkomitmen menjaga stabilitas harga daerah.",
-    "potensi_pertanian": "Ngada unggul di sektor Kopi Arabika, Cengkeh, dan Pertanian Hortikultura.",
-    "potensi_pariwisata": "Destinasi ikonik meliputi Kampung Adat Bena dan Taman Laut 17 Pulau Riung.",
-    "tren_pilihan": []
-}
+def load_settings():
+    default_data = {
+        "hero_title": "Smart Economy Ngada 👋",
+        "hero_subtitle": "Data harga komoditas akurat untuk masyarakat Ngada.",
+        "about_text": "Bagian Perekonomian & SDA Setda Ngada berkomitmen menjaga stabilitas harga daerah.",
+        "potensi_pertanian": "Ngada unggul di sektor Kopi Arabika, Cengkeh, dan Pertanian Hortikultura.",
+        "potensi_pariwisata": "Destinasi ikonik meliputi Kampung Adat Bena dan Taman Laut 17 Pulau Riung.",
+        "tren_pilihan": [] 
+    }
+    if os.path.exists(DB_FILE):
+        with open(DB_FILE, "r") as f:
+            return json.load(f)
+    return default_data
 
-def load_store():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as f:
-            data = json.load(f)
-        # Merge dengan default agar key baru tidak hilang
-        return {**DEFAULT_DATA, **data}
-    return DEFAULT_DATA.copy()
+def save_settings(data):
+    with open(DB_FILE, "w") as f:
+        json.dump(data, f)
 
-def save_store(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+# Inisialisasi data ke session state agar bisa diedit langsung
+if "store" not in st.session_state:
+    st.session_state.store = load_settings()
 
-# Load ke session_state hanya sekali saat pertama kali
-if 'store' not in st.session_state:
-    st.session_state.store = load_store()
-
-store = st.session_state.store
 is_admin = st.query_params.get("status") == "set"
 
 if 'page' not in st.session_state:
     st.session_state.page = "Beranda"
 
-# --- 3. HELPER GAMBAR & CSS (BIRU & TEKS HITAM) ---
+# --- 3. HELPER GAMBAR & CSS ---
 def get_base64(file):
     if os.path.exists(file):
         with open(file, "rb") as f: return base64.b64encode(f.read()).decode()
@@ -53,17 +49,14 @@ img_logo = get_base64("logo_ngada.png")
 
 st.markdown(f"""
     <style>
-    /* LATAR BELAKANG BIRU MUDA */
     .stApp {{ background-color: #E0F2FE !important; }}
-    
-    /* PAKSA SEMUA TEKS JADI HITAM PEKAT */
     html, body, [data-testid="stWidgetLabel"], .stText, p, h1, h2, h3, h4, h5, h6, span, div, li {{
         color: #000000 !important;
     }}
-    
-    [data-testid="column"] {{ min-width: 0px !important; }}
-    
-    /* Header Pimpinan */
+    .price-card {{
+        background: #FFFFFF !important; padding: 12px; border-radius: 12px; 
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 8px; border-left: 5px solid #059669;
+    }}
     .pimpinan-frame {{
         width: 100px; height: 100px; border-radius: 15px; border: 3px solid #059669;
         background-image: url("data:image/jpeg;base64,{img_pimpinan}");
@@ -73,18 +66,6 @@ st.markdown(f"""
         position: absolute; bottom: 5px; right: 5px; width: 30px; height: 30px;
         background: white; border-radius: 5px; padding: 2px;
     }}
-
-    /* Card Harga Putih agar Kontras */
-    .price-card {{
-        background: #FFFFFF !important; padding: 12px; border-radius: 12px; 
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 8px; border-left: 5px solid #059669;
-    }}
-    .flex-container {{ display: flex; justify-content: space-between; align-items: center; gap: 5px; }}
-    
-    /* Input Search & Admin agar Teks Hitam */
-    input {{ color: #000000 !important; }}
-    
-    /* Tombol Navigasi Biru Tua */
     .stButton button {{
         background-color: #0369a1 !important; color: #FFFFFF !important;
         padding: 5px 2px; font-size: 0.75rem !important; border-radius: 8px !important;
@@ -92,9 +73,9 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. LOAD DATA ---
+# --- 4. LOAD DATA (DARI GOOGLE SHEETS) ---
 @st.cache_data(ttl=60)
-def load_all_data():
+def load_gsheets_data():
     df_h, df_b = pd.DataFrame(), pd.DataFrame()
     try:
         url_h = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR54g3RrvlqqZ3ppTrKiKK-L1fVT8YSvnXfihtO-H795s0KQ6H_TewZLFFAXPi-ktMizomg3JHdIIjI/pub?gid=929993273&single=true&output=csv"
@@ -111,7 +92,7 @@ def load_all_data():
     except: pass
     return df_h, df_b
 
-df_harga, df_berita = load_all_data()
+df_harga, df_berita = load_gsheets_data()
 
 # --- 5. HEADER & NAVIGASI ---
 with st.container():
@@ -122,61 +103,47 @@ with st.container():
         st.markdown("<h3 style='margin:0;'>KABUPATEN NGADA</h3>", unsafe_allow_html=True)
         st.markdown("<p style='color:#0369a1; font-weight:bold; margin:0;'>Bagian Perekonomian & SDA Setda</p>", unsafe_allow_html=True)
 
-    st.write("")
     m = st.columns(7)
     pages = ["Beranda", "Harga", "Tren", "Media", "Tentang", "Unduh", "Potensi"]
     for i, p in enumerate(pages):
         if m[i].button(p, key=f"nav_{p}", use_container_width=True): st.session_state.page = p
 st.divider()
 
-# --- 6. PANEL ADMIN LENGKAP (URL: ?status=set) ---
+# --- 6. PANEL ADMIN LENGKAP DENGAN TOMBOL SIMPAN ---
 if is_admin:
     with st.sidebar:
         st.header("🛠️ Panel Editor Admin")
         
+        # Form Editor
         with st.expander("🏠 Edit Beranda", expanded=True):
-            store["hero_title"] = st.text_input("Judul Utama", store["hero_title"])
-            store["hero_subtitle"] = st.text_area("Sub-judul", store["hero_subtitle"])
+            st.session_state.store["hero_title"] = st.text_input("Judul Utama", st.session_state.store["hero_title"])
+            st.session_state.store["hero_subtitle"] = st.text_area("Sub-judul", st.session_state.store["hero_subtitle"])
         
         with st.expander("📈 Edit Grafik Tren"):
             all_items = df_harga['KOMODITAS'].unique().tolist() if not df_harga.empty else []
-            store["tren_pilihan"] = st.multiselect(
-                "Pilih Komoditas",
-                all_items,
-                default=[x for x in store["tren_pilihan"] if x in all_items] if store["tren_pilihan"] else all_items[:5]
-            )
+            st.session_state.store["tren_pilihan"] = st.multiselect("Pilih Komoditas", all_items, default=st.session_state.store["tren_pilihan"] if st.session_state.store["tren_pilihan"] else all_items[:5])
             
         with st.expander("🏛️ Edit Potensi"):
-            store["potensi_pertanian"] = st.text_area("Teks Pertanian", store["potensi_pertanian"])
-            store["potensi_pariwisata"] = st.text_area("Teks Pariwisata", store["potensi_pariwisata"])
+            st.session_state.store["potensi_pertanian"] = st.text_area("Teks Pertanian", st.session_state.store["potensi_pertanian"])
+            st.session_state.store["potensi_pariwisata"] = st.text_area("Teks Pariwisata", st.session_state.store["potensi_pariwisata"])
             
         with st.expander("ℹ️ Edit Tentang"):
-            store["about_text"] = st.text_area("Konten Tentang", store["about_text"])
-
-        st.divider()
-
-        # ✅ TOMBOL SIMPAN PERMANEN KE FILE JSON
-        if st.button("💾 Simpan Semua Perubahan", use_container_width=True, type="primary"):
-            save_store(store)
-            st.success("✅ Data berhasil disimpan!")
-            st.rerun()
-
-        # Tombol reset ke default
-        if st.button("🔄 Reset ke Default", use_container_width=True):
-            save_store(DEFAULT_DATA)
-            st.session_state.store = DEFAULT_DATA.copy()
-            st.warning("⚠️ Data direset ke default!")
-            st.rerun()
-
-        st.success("Mode Admin Aktif")
+            st.session_state.store["about_text"] = st.text_area("Konten Tentang", st.session_state.store["about_text"])
+        
+        # TOMBOL KERAMAT: SIMPAN PERMANEN
+        if st.button("💾 SIMPAN PERMANEN", use_container_width=True):
+            save_settings(st.session_state.store)
+            st.success("Perubahan Berhasil Disimpan Permanen!")
+            st.toast("Data Tersimpan ke Database!")
 
 # --- 7. LOGIKA HALAMAN ---
+store = st.session_state.store # Memanggil data dari state
 
 def format_price(ini, kmrn):
     diff = ini - kmrn
     color = "#EF4444" if diff > 0 else ("#10B981" if diff < 0 else "#64748B")
     icon = "▲" if diff > 0 else ("▼" if diff < 0 else "—")
-    return f"<b>Rp {ini:,}</b><br><small style='color:#64748B;'>Lalu: {kmrn:,}</small><br><span style='color:{color}; font-weight:bold;'>{icon} {abs(diff):,}</span>"
+    return f"<b>Rp {ini:,}</b><br><span style='color:{color}; font-weight:bold;'>{icon} {abs(diff):,}</span>"
 
 if st.session_state.page == "Beranda":
     st.subheader(store["hero_title"])
@@ -205,13 +172,6 @@ elif st.session_state.page == "Tren":
         df_p = df_harga[df_harga['KOMODITAS'].isin(pilihan)]
         fig = px.bar(df_p, x='KOMODITAS', y=['K_KMRN', 'K_INI'], barmode='group', color_discrete_map={'K_KMRN': '#94A3B8', 'K_INI': '#0369a1'})
         st.plotly_chart(fig, use_container_width=True)
-
-elif st.session_state.page == "Media":
-    st.subheader("📰 Berita Terkini")
-    if not df_berita.empty:
-        for _, row in df_berita.iloc[::-1].iterrows():
-            with st.expander(f"{row['Tanggal']} - {row['Kegiatan']}"):
-                if "http" in str(row['Link']): st.link_button("Baca Berita", row['Link'])
 
 elif st.session_state.page == "Potensi":
     st.subheader("🏛️ Potensi Daerah")
