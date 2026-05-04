@@ -7,10 +7,11 @@ import json
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(page_title="Portal Ekonomi Ngada", page_icon="🏛️", layout="wide", initial_sidebar_state="collapsed")
 
-# --- 2. SISTEM DATABASE (JSON) ---
+# --- 2. SISTEM DATABASE (DENGAN PERBAIKAN KEYERROR) ---
 DB_FILE = "settings_db.json"
 
 def load_settings():
+    # Struktur data default yang lengkap
     default_data = {
         "hero_title": "Smart Economy Ngada 👋",
         "hero_subtitle": "Data harga komoditas akurat untuk masyarakat Ngada.",
@@ -21,15 +22,25 @@ def load_settings():
         "kontak_alamat": "Jl. Soekarno-Hatta No. 1, Bajawa",
         "tren_pilihan": [] 
     }
+    
     if os.path.exists(DB_FILE):
         try:
-            with open(DB_FILE, "r") as f: return json.load(f)
-        except: return default_data
+            with open(DB_FILE, "r") as f:
+                saved_data = json.load(f)
+                # Sinkronisasi: Jika ada key baru di default yang belum ada di saved_data, tambahkan!
+                for key, value in default_data.items():
+                    if key not in saved_data:
+                        saved_data[key] = value
+                return saved_data
+        except:
+            return default_data
     return default_data
 
 def save_settings(data):
-    with open(DB_FILE, "w") as f: json.dump(data, f)
+    with open(DB_FILE, "w") as f:
+        json.dump(data, f)
 
+# Inisialisasi store ke session state
 if "store" not in st.session_state:
     st.session_state.store = load_settings()
 
@@ -82,36 +93,35 @@ def load_all_data():
 
 df_harga, df_media = load_all_data()
 
-# --- 5. PANEL EDIT ADMIN (LENGKAP) ---
+# --- 5. PANEL EDIT ADMIN ---
 if is_admin:
     with st.sidebar:
         st.header("⚙️ Control Panel Admin")
-        st.write("Edit konten aplikasi di bawah ini:")
         
-        with st.expander("🏠 Edit Beranda"):
+        with st.expander("🏠 Edit Beranda", expanded=False):
             st.session_state.store["hero_title"] = st.text_input("Judul Utama", st.session_state.store["hero_title"])
             st.session_state.store["hero_subtitle"] = st.text_area("Sub-Judul", st.session_state.store["hero_subtitle"])
         
-        with st.expander("📊 Edit Tren"):
+        with st.expander("📊 Edit Tren", expanded=False):
             all_items = df_harga['KOMODITAS'].unique().tolist() if not df_harga.empty else []
             st.session_state.store["tren_pilihan"] = st.multiselect("Komoditas di Grafik", all_items, default=st.session_state.store["tren_pilihan"])
         
-        with st.expander("🏛️ Edit Potensi"):
+        with st.expander("🏛️ Edit Potensi", expanded=False):
             st.session_state.store["potensi_pertanian"] = st.text_area("Deskripsi Pertanian", st.session_state.store["potensi_pertanian"])
             st.session_state.store["potensi_pariwisata"] = st.text_area("Deskripsi Pariwisata", st.session_state.store["potensi_pariwisata"])
         
-        with st.expander("ℹ️ Edit Tentang & Kontak"):
+        with st.expander("ℹ️ Edit Tentang & Kontak", expanded=False):
             st.session_state.store["about_text"] = st.text_area("Sejarah/Visi", st.session_state.store["about_text"])
-            st.session_state.store["kontak_email"] = st.text_input("Email", st.session_state.store["kontak_email"])
-            st.session_state.store["kontak_alamat"] = st.text_input("Alamat", st.session_state.store["kontak_alamat"])
+            st.session_state.store["kontak_email"] = st.text_input("Email", st.session_state.store.get("kontak_email", "ekonomi@ngadakab.go.id"))
+            st.session_state.store["kontak_alamat"] = st.text_input("Alamat", st.session_state.store.get("kontak_alamat", "Jl. Soekarno-Hatta No. 1, Bajawa"))
 
         st.divider()
-        if st.button("💾 SIMPAN SEMUA PERUBAHAN", use_container_width=True, type="primary"):
+        if st.button("💾 SIMPAN PERUBAHAN", use_container_width=True, type="primary"):
             save_settings(st.session_state.store)
-            st.success("Data Berhasil Diperbarui!")
+            st.success("Berhasil Disimpan!")
             st.balloons()
 
-# --- 6. NAVIGASI ---
+# --- 6. NAVIGASI UTAMA ---
 st.title("🏛️ Portal Ekonomi Ngada")
 cols_nav = st.columns(7)
 menu = ["Beranda", "Harga", "Tren", "Media", "Tentang", "Unduh", "Potensi"]
@@ -120,11 +130,11 @@ for i, m in enumerate(menu):
         st.session_state.page = m
 st.divider()
 
-# --- 7. LOGIKA HALAMAN ---
+# --- 7. LOGIKA TAMPILAN ---
 store = st.session_state.store
 
 if st.session_state.page == "Media":
-    st.markdown("### 📰 Media & Berita")
+    st.markdown("### 📰 Warta Ekonomi Terkini")
     if not df_media.empty:
         for _, row in df_media.iloc[::-1].iterrows():
             st.markdown(f"""
@@ -135,11 +145,11 @@ if st.session_state.page == "Media":
             </div>
             """, unsafe_allow_html=True)
             if "http" in str(row['Link']):
-                st.link_button("🔗 Lihat Sumber", row['Link'])
-            st.write("")
+                st.link_button("🔗 Baca Selengkapnya", row['Link'])
+            st.markdown("<br>", unsafe_allow_html=True)
 
 elif st.session_state.page == "Harga":
-    st.markdown("### 🛍️ Pantauan Harga")
+    st.markdown("### 🛍️ Pantauan Harga Komoditas")
     query = st.text_input("🔍 Cari Komoditas...", "").lower()
     if not df_harga.empty:
         filtered = df_harga[df_harga['KOMODITAS'].str.lower().str.contains(query)]
@@ -151,35 +161,35 @@ elif st.session_state.page == "Harga":
 
             st.markdown(f"""
             <div class="price-card">
-                <div style="display: flex; flex-wrap: wrap;">
-                    <div style="flex: 1.5; min-width: 200px;">
-                        <div style="font-size: 1.25rem; font-weight: bold;">{r['KOMODITAS']}</div>
-                        <div style="color: #64748B;">Satuan: {r['SATUAN']}</div>
+                <div style="display: flex; flex-wrap: wrap; align-items: flex-start;">
+                    <div style="flex: 1.5; min-width: 200px; margin-bottom: 10px;">
+                        <div style="font-size: 1.25rem; font-weight: bold; color: #1E293B;">{r['KOMODITAS']}</div>
+                        <div style="color: #64748B; font-size: 0.9rem;">Satuan: {r['SATUAN']}</div>
                     </div>
                     <div class="box-harga">
-                        <div style="font-weight:bold; font-size:12px; color:#0369a1;">BESAR</div>
-                        <div style="font-size:14px;">Hari Ini: <b style="color:{cb}">Rp {r['B_INI']:,}</b></div>
-                        <div style="font-size:12px; color:#94A3B8; text-decoration:line-through;">Kemarin: Rp {r['B_KMRN']:,}</div>
-                        <div class="status-badge" style="background:{bgb}; color:{cb};">{txtb}</div>
+                        <div style="color: #0369a1; font-weight: bold; font-size: 0.8rem;">PEDAGANG BESAR</div>
+                        <div style="font-size: 0.75rem; color: #64748B;">Hari Ini: <b style="color:{cb}">Rp {r['B_INI']:,}</b></div>
+                        <div style="font-size: 0.7rem; color: #94A3B8; text-decoration:line-through;">Kemarin: Rp {r['B_KMRN']:,}</div>
+                        <div class="status-badge" style="background: {bgb}; color: {cb};">{txtb}</div>
                     </div>
                     <div class="box-harga">
-                        <div style="font-weight:bold; font-size:12px; color:#0369a1;">KECIL</div>
-                        <div style="font-size:14px;">Hari Ini: <b style="color:{ck}">Rp {r['K_INI']:,}</b></div>
-                        <div style="font-size:12px; color:#94A3B8; text-decoration:line-through;">Kemarin: Rp {r['K_KMRN']:,}</div>
-                        <div class="status-badge" style="background:{bgk}; color:{ck};">{txtk}</div>
+                        <div style="color: #0369a1; font-weight: bold; font-size: 0.8rem;">PEDAGANG KECIL</div>
+                        <div style="font-size: 0.75rem; color: #64748B;">Hari Ini: <b style="color:{ck}">Rp {r['K_INI']:,}</b></div>
+                        <div style="font-size: 0.7rem; color: #94A3B8; text-decoration:line-through;">Kemarin: Rp {r['K_KMRN']:,}</div>
+                        <div class="status-badge" style="background: {bgk}; color: {ck};">{txtk}</div>
                     </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
 elif st.session_state.page == "Potensi":
-    st.markdown("### 🏛️ Potensi Ekonomi")
-    t1, t2 = st.tabs(["🌾 Pertanian", "🏞️ Pariwisata"])
+    st.markdown("### 🏛️ Potensi Ekonomi Unggulan")
+    t1, t2 = st.tabs(["🌾 Pertanian & SDA", "🏞️ Pariwisata"])
     with t1:
         st.write(store["potensi_pertanian"])
         c1, c2 = st.columns(2)
         with c1:
-            if os.path.exists("cengkeh.jpeg"): st.image("cengkeh.jpeg", caption="Cengkeh Ngada", use_container_width=True)
+            if os.path.exists("cengkeh.jpeg"): st.image("cengkeh.jpeg", caption="Potensi Cengkeh", use_container_width=True)
         with c2:
             if os.path.exists("sawah ngada.webp"): st.image("sawah ngada.webp", caption="Lahan Pertanian", use_container_width=True)
     with t2:
@@ -195,12 +205,20 @@ elif st.session_state.page == "Beranda":
     st.info(store["hero_subtitle"])
     if os.path.exists("IMG_20251125_111048.jpg"): st.image("IMG_20251125_111048.jpg", use_container_width=True)
 
+elif st.session_state.page == "Tren":
+    st.subheader("📈 Analisis Tren Harga")
+    if not df_harga.empty:
+        pilihan = store["tren_pilihan"] if store["tren_pilihan"] else df_harga['KOMODITAS'].head(5).tolist()
+        df_p = df_harga[df_harga['KOMODITAS'].isin(pilihan)]
+        fig = px.bar(df_p, x='KOMODITAS', y=['K_INI', 'B_INI'], barmode='group', labels={'value':'Harga (Rp)', 'variable':'Tipe Pedagang'}, color_discrete_sequence=['#0ea5e9', '#0369a1'])
+        st.plotly_chart(fig, use_container_width=True)
+
 elif st.session_state.page == "Tentang":
-    st.subheader("Profil & Kontak")
+    st.subheader("Informasi Instansi")
     st.write(store["about_text"])
     st.divider()
-    st.write(f"📧 **Email:** {store['kontak_email']}")
-    st.write(f"📍 **Alamat:** {store['kontak_alamat']}")
+    st.markdown(f"📧 **Email:** {store.get('kontak_email', '-')}")
+    st.markdown(f"📍 **Alamat:** {store.get('kontak_alamat', '-')}")
 
 elif st.session_state.page == "Unduh":
-    st.download_button("Download Data Harga (CSV)", df_harga.to_csv(index=False), "data_harga_ngada.csv", use_container_width=True)
+    st.download_button("Download CSV Data Harga", df_harga.to_csv(index=False), "harga_ngada.csv", use_container_width=True)
