@@ -110,12 +110,12 @@ with st.container():
         if m[i].button(p, key=f"nav_{p}", use_container_width=True): st.session_state.page = p
 st.divider()
 
-# --- 6. PANEL ADMIN (DIPERBAIKI) ---
+# --- 6. PANEL ADMIN (SIDEBAR) ---
 if is_admin:
     with st.sidebar:
         st.header("🛠️ Admin Editor")
         with st.expander("📝 Edit Beranda", expanded=True):
-            st.session_state.store["hero_title"] = st.text_input("Judul", st.session_state.store["hero_title"])
+            st.session_state.store["hero_title"] = st.text_input("Judul Utama", st.session_state.store["hero_title"])
             st.session_state.store["hero_subtitle"] = st.text_area("Sub-judul", st.session_state.store["hero_subtitle"])
         
         with st.expander("📊 Edit Tren"):
@@ -127,13 +127,13 @@ if is_admin:
             st.session_state.store["potensi_pariwisata"] = st.text_area("Teks Pariwisata", st.session_state.store["potensi_pariwisata"])
             
         with st.expander("ℹ️ Edit Tentang"):
-            st.session_state.store["about_text"] = st.text_area("Teks Tentang", st.session_state.store["about_text"])
+            st.session_state.store["about_text"] = st.text_area("Konten Tentang", st.session_state.store["about_text"])
 
         if st.button("💾 SIMPAN PERMANEN", use_container_width=True):
             save_settings(st.session_state.store)
             st.success("Perubahan Berhasil Disimpan!")
 
-# --- 7. FUNGSI TAMPILAN HARGA ---
+# --- 7. FUNGSI RENDER HARGA ---
 def render_price_col(label, ini, kmrn):
     diff = ini - kmrn
     if diff > 0:
@@ -173,6 +173,7 @@ elif st.session_state.page == "Harga":
             else:
                 col_besar = render_price_col("PEDAGANG BESAR", r['B_INI'], r['B_KMRN'])
                 col_kecil = render_price_col("PEDAGANG KECIL", r['K_INI'], r['K_KMRN'])
+                # Layout utama hanya terdiri dari 3 bagian: Nama, Besar, Kecil
                 st.markdown(f"""
                 <div class="price-card">
                     <div style="display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-start;">
@@ -187,14 +188,14 @@ elif st.session_state.page == "Harga":
                 """, unsafe_allow_html=True)
 
 elif st.session_state.page == "Media":
-    st.subheader("📰 Media Berita")
+    st.subheader("📰 Media & Berita Terkini")
     if not df_berita.empty:
         for _, row in df_berita.iloc[::-1].iterrows():
             with st.expander(f"📅 {row['Tanggal']} - {row['Kegiatan']}"):
                 if "http" in str(row['Link']): st.link_button("Baca Selengkapnya", row['Link'])
 
 elif st.session_state.page == "Tren":
-    st.subheader("📈 Tren Harga")
+    st.subheader("📈 Analisis Grafik Tren")
     if not df_harga.empty:
         pilihan = store["tren_pilihan"] if store["tren_pilihan"] else df_harga['KOMODITAS'].head(5).tolist()
         df_p = df_harga[df_harga['KOMODITAS'].isin(pilihan)]
@@ -202,7 +203,7 @@ elif st.session_state.page == "Tren":
         st.plotly_chart(fig, use_container_width=True)
 
 elif st.session_state.page == "Potensi":
-    st.subheader("🏛️ Potensi Ekonomi")
+    st.subheader("🏛️ Potensi Ekonomi Daerah")
     t1, t2 = st.tabs(["🌾 Pertanian", "🏞️ Pariwisata"])
     with t1: st.write(store["potensi_pertanian"])
     with t2: st.write(store["potensi_pariwisata"])
@@ -211,4 +212,4 @@ elif st.session_state.page == "Tentang":
     st.write(store["about_text"])
 
 elif st.session_state.page == "Unduh":
-    st.download_button("📥 Download CSV", df_harga.to_csv(index=False), "harga_ngada.csv", use_container_width=True)
+    st.download_button("📥 Download Data CSV", df_harga.to_csv(index=False), "harga_ngada.csv", use_container_width=True)
