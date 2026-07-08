@@ -357,6 +357,11 @@ if st.session_state.page == "Beranda":
     if os.path.exists("IMG_20251125_111048.jpg"):
         st.image("IMG_20251125_111048.jpg", use_container_width=True)
 
+    st.write("")
+    st.markdown("### 💬 Komentar & Rating Pengunjung")
+    st.caption("Berikan penilaian dan masukan Anda terhadap website Portal Ekonomi Ngada ini.")
+    render_comment_section("website_umum", "Portal Ekonomi Ngada")
+
 elif st.session_state.page == "Harga":
     st.markdown("### 🛍️ Pantauan Harga Pasar")
     query = st.text_input("🔍 Cari Nama Komoditas...", "").lower()
@@ -421,26 +426,15 @@ elif st.session_state.page == "Media":
     st.subheader("📰 Berita Ekonomi & SDA")
     if not df_berita.empty:
         for _, row in df_berita.iloc[::-1].iterrows():
-            kid = news_key(row)
-            entries = st.session_state.comments.get(kid, {}).get("entries", [])
-            avg_txt = ""
-            if entries:
-                avg = sum(e["rating"] for e in entries) / len(entries)
-                avg_txt = f" &nbsp;·&nbsp; {render_stars(avg)} {avg:.1f} ({len(entries)})"
-
             st.markdown(f"""
             <div class="news-card">
                 <span class="news-date">{row['Tanggal']}</span>
-                <div class="news-title">{row['Kegiatan']}{avg_txt}</div>
+                <div class="news-title">{row['Kegiatan']}</div>
             </div>
             """, unsafe_allow_html=True)
 
             if "http" in str(row['Link']):
                 st.link_button("📖 Selengkapnya", row['Link'], use_container_width=True)
-
-            st.markdown("**💬 Komentar Warga**")
-            render_comment_section(kid, row['Kegiatan'])
-            st.markdown("<hr style='margin:22px 0; border-color:#DBEAFE;'>", unsafe_allow_html=True)
 
 elif st.session_state.page == "Potensi":
     st.subheader("🏛️ Potensi Daerah Ngada")
