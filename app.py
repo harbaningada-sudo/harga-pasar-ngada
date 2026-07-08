@@ -207,7 +207,7 @@ with st.container():
     with c2:
         st.markdown("""
         <div class="header-banner" style="margin-left:-10px;">
-            <h2>KABUPATEN NGADA</h2>
+            <h2><span style="background:rgba(255,255,255,0.25); padding:2px 10px; border-radius:8px; margin-right:8px; font-size:0.85em;">SI-PARI</span>KABUPATEN NGADA</h2>
             <p>Bagian Perekonomian & SDA Setda</p>
         </div>
         """, unsafe_allow_html=True)
