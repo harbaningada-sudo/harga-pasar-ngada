@@ -338,6 +338,34 @@ def render_comment_section(key_id, title):
 
     entries = st.session_state.comments[key_id]["entries"]
 
+    # --- Form komentar ditaruh di ATAS agar mudah diakses tanpa scroll ---
+    with st.form(key=f"form_{key_id}", clear_on_submit=True):
+        nama = st.text_input("Nama Anda", key=f"nama_{key_id}", placeholder="Masukkan nama...")
+        rating = st.radio(
+            "Beri Rating", options=[1, 2, 3, 4, 5], index=4, horizontal=True,
+            format_func=lambda x: "⭐" * x, key=f"rating_{key_id}"
+        )
+        isi = st.text_area("Komentar Anda", key=f"isi_{key_id}", placeholder="Tulis tanggapan atau masukan Anda...")
+        submitted = st.form_submit_button("Kirim Komentar", use_container_width=True)
+        if submitted:
+            if nama.strip() and isi.strip():
+                entries.append({
+                    "nama": nama.strip(),
+                    "rating": rating,
+                    "isi": isi.strip(),
+                    "tanggal": datetime.now().strftime("%d %b %Y, %H:%M"),
+                    "balasan": "",
+                    "balasan_tanggal": ""
+                })
+                save_comments(st.session_state.comments)
+                st.success("Terima kasih atas komentar Anda!")
+                st.rerun()
+            else:
+                st.warning("Nama dan komentar tidak boleh kosong.")
+
+    st.write("")
+
+    # --- Daftar komentar & balasan ditaruh di BAWAH form ---
     if entries:
         avg = sum(e["rating"] for e in entries) / len(entries)
         st.markdown(
@@ -367,31 +395,6 @@ def render_comment_section(key_id, title):
                 <span class="reply-date">{balasan_tanggal}</span>
             </div>
             """, unsafe_allow_html=True)
-
-    st.write("")
-    with st.form(key=f"form_{key_id}", clear_on_submit=True):
-        nama = st.text_input("Nama Anda", key=f"nama_{key_id}", placeholder="Masukkan nama...")
-        rating = st.radio(
-            "Beri Rating", options=[1, 2, 3, 4, 5], index=4, horizontal=True,
-            format_func=lambda x: "⭐" * x, key=f"rating_{key_id}"
-        )
-        isi = st.text_area("Komentar Anda", key=f"isi_{key_id}", placeholder="Tulis tanggapan atau masukan Anda...")
-        submitted = st.form_submit_button("Kirim Komentar", use_container_width=True)
-        if submitted:
-            if nama.strip() and isi.strip():
-                entries.append({
-                    "nama": nama.strip(),
-                    "rating": rating,
-                    "isi": isi.strip(),
-                    "tanggal": datetime.now().strftime("%d %b %Y, %H:%M"),
-                    "balasan": "",
-                    "balasan_tanggal": ""
-                })
-                save_comments(st.session_state.comments)
-                st.success("Terima kasih atas komentar Anda!")
-                st.rerun()
-            else:
-                st.warning("Nama dan komentar tidak boleh kosong.")
 
 # --- 8. LOGIKA HALAMAN ---
 store = st.session_state.store
