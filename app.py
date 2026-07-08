@@ -171,6 +171,16 @@ st.markdown(f"""
     .comment-name {{ font-weight:700; color:#0369a1 !important; font-size:0.9rem; }}
     .comment-date {{ color:#94A3B8 !important; font-size:0.7rem; }}
 
+    .reply-box {{
+        background:#EFF6FF; border-radius:12px; padding:10px 14px; margin-top:8px;
+        margin-left: 24px; border-left: 3px solid #0369a1;
+    }}
+    .reply-label {{
+        font-weight:700; color:#0369a1 !important; font-size:0.85rem;
+        display:flex; align-items:center; gap:6px;
+    }}
+    .reply-date {{ color:#94A3B8 !important; font-size:0.7rem; }}
+
     section[data-testid="stExpander"] {{
         background:#FFFFFF; border-radius:14px !important; border: none !important;
         box-shadow: 0 4px 10px rgba(0,0,0,0.06); margin-bottom: 14px;
@@ -243,7 +253,7 @@ if is_admin:
             st.balloons()
 
         st.divider()
-        st.subheader("💬 Moderasi Komentar")
+        st.subheader("💬 Moderasi & Balasan Komentar")
         if st.session_state.comments:
             for k, item in st.session_state.comments.items():
                 title = item.get("title", k)
@@ -251,10 +261,32 @@ if is_admin:
                 with st.expander(f"{title} ({jumlah} komentar)"):
                     for idx, cmt in enumerate(item.get("entries", [])):
                         st.write(f"⭐ {cmt['rating']} — **{cmt['nama']}**: {cmt['isi']}")
-                        if st.button("🗑️ Hapus", key=f"del_{k}_{idx}"):
-                            item["entries"].pop(idx)
-                            save_comments(st.session_state.comments)
-                            st.rerun()
+
+                        balasan_existing = cmt.get("balasan", "")
+                        if balasan_existing:
+                            st.caption(f"↳ Balasan admin: {balasan_existing}")
+
+                        balasan_baru = st.text_area(
+                            "Tulis / edit balasan admin",
+                            value=balasan_existing,
+                            key=f"reply_{k}_{idx}",
+                            height=80
+                        )
+
+                        col_a, col_b = st.columns(2)
+                        with col_a:
+                            if st.button("📨 Kirim Balasan", key=f"send_reply_{k}_{idx}", use_container_width=True):
+                                cmt["balasan"] = balasan_baru.strip()
+                                cmt["balasan_tanggal"] = datetime.now().strftime("%d %b %Y, %H:%M")
+                                save_comments(st.session_state.comments)
+                                st.success("Balasan tersimpan!")
+                                st.rerun()
+                        with col_b:
+                            if st.button("🗑️ Hapus Komentar", key=f"del_{k}_{idx}", use_container_width=True):
+                                item["entries"].pop(idx)
+                                save_comments(st.session_state.comments)
+                                st.rerun()
+                        st.divider()
         else:
             st.caption("Belum ada komentar masuk.")
 
@@ -325,6 +357,17 @@ def render_comment_section(key_id, title):
         </div>
         """, unsafe_allow_html=True)
 
+        balasan = e.get("balasan", "")
+        if balasan:
+            balasan_tanggal = e.get("balasan_tanggal", "")
+            st.markdown(f"""
+            <div class="reply-box">
+                <span class="reply-label">🏛️ Balasan Admin</span><br>
+                <span>{balasan}</span><br>
+                <span class="reply-date">{balasan_tanggal}</span>
+            </div>
+            """, unsafe_allow_html=True)
+
     st.write("")
     with st.form(key=f"form_{key_id}", clear_on_submit=True):
         nama = st.text_input("Nama Anda", key=f"nama_{key_id}", placeholder="Masukkan nama...")
@@ -340,7 +383,9 @@ def render_comment_section(key_id, title):
                     "nama": nama.strip(),
                     "rating": rating,
                     "isi": isi.strip(),
-                    "tanggal": datetime.now().strftime("%d %b %Y, %H:%M")
+                    "tanggal": datetime.now().strftime("%d %b %Y, %H:%M"),
+                    "balasan": "",
+                    "balasan_tanggal": ""
                 })
                 save_comments(st.session_state.comments)
                 st.success("Terima kasih atas komentar Anda!")
