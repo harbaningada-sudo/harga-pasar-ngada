@@ -435,12 +435,12 @@ elif st.session_state.page == "Media":
             </div>
             """, unsafe_allow_html=True)
 
-            with st.expander("💬 Selengkapnya & Komentar"):
-                if "http" in str(row['Link']):
-                    st.link_button("📖 Selengkapnya", row['Link'], use_container_width=True)
-                st.markdown("---")
-                st.markdown("**Komentar Warga**")
-                render_comment_section(kid, row['Kegiatan'])
+            if "http" in str(row['Link']):
+                st.link_button("📖 Selengkapnya", row['Link'], use_container_width=True)
+
+            st.markdown("**💬 Komentar Warga**")
+            render_comment_section(kid, row['Kegiatan'])
+            st.markdown("<hr style='margin:22px 0; border-color:#DBEAFE;'>", unsafe_allow_html=True)
 
 elif st.session_state.page == "Potensi":
     st.subheader("🏛️ Potensi Daerah Ngada")
