@@ -4,12 +4,15 @@ import plotly.express as px
 import os
 import base64
 import json
+import hashlib
+from datetime import datetime
 
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(page_title="Portal Ekonomi Ngada", page_icon="🏛️", layout="wide", initial_sidebar_state="collapsed")
 
 # --- 2. SISTEM DATABASE (PERMANEN) ---
 DB_FILE = "settings_db.json"
+COMMENTS_FILE = "comments_db.json"
 
 def load_settings():
     default_data = {
@@ -18,7 +21,7 @@ def load_settings():
         "about_text": "Bagian Perekonomian dan SDA Setda Ngada. Hadir sebagai pusat informasi, koordinasi, dan fasilitasi pembangunan ekonomi serta pengelolaan sumber daya alam demi kemajuan Kabupaten Ngada",
         "potensi_pertanian": "Ngada unggul di sektor Kopi Arabika, Cengkeh, dan Pertanian Hortikultura.",
         "potensi_pariwisata": "Destinasi ikonik meliputi Kampung Adat Bena dan Taman Laut 17 Pulau Riung.",
-        "tren_pilihan": [] 
+        "tren_jumlah": 6
     }
     if os.path.exists(DB_FILE):
         try:
@@ -34,9 +37,30 @@ def save_settings(data):
     with open(DB_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
+def load_comments():
+    if os.path.exists(COMMENTS_FILE):
+        try:
+            with open(COMMENTS_FILE, "r") as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_comments(data):
+    with open(COMMENTS_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+def news_key(row):
+    """Bikin ID unik & stabil untuk tiap berita berdasarkan judul+tanggal."""
+    raw = f"{row.get('Tanggal','')}-{row.get('Kegiatan','')}"
+    return hashlib.md5(raw.encode()).hexdigest()[:10]
+
 # Inisialisasi State agar tidak NameError
 if "store" not in st.session_state:
     st.session_state.store = load_settings()
+
+if "comments" not in st.session_state:
+    st.session_state.comments = load_comments()
 
 if 'page' not in st.session_state:
     st.session_state.page = "Beranda"
@@ -54,28 +78,102 @@ img_logo = get_base64("logo_ngada.png")
 
 st.markdown(f"""
     <style>
-    .stApp {{ background-color: #E0F2FE !important; }}
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
+
+    html, body, [class*="css"] {{
+        font-family: 'Poppins', sans-serif;
+    }}
+
+    .stApp {{
+        background: linear-gradient(180deg, #EAF6FF 0%, #E0F2FE 40%, #F0F9FF 100%) !important;
+    }}
     [data-testid="stHeader"] {{ background: rgba(0,0,0,0); }}
     html, body, [data-testid="stWidgetLabel"], .stText, p, h1, h2, h3, h4, h5, h6, span, div, li {{
-        color: #000000 !important;
+        color: #0F172A !important;
     }}
+
+    /* ===== HEADER ===== */
+    .header-banner {{
+        background: linear-gradient(120deg, #0369a1 0%, #059669 100%);
+        border-radius: 20px;
+        padding: 22px 28px;
+        box-shadow: 0 10px 25px rgba(3,105,161,0.25);
+        margin-bottom: 6px;
+    }}
+    .header-banner h2, .header-banner p {{ color: #FFFFFF !important; }}
+    .header-banner h2 {{
+        margin: 0; font-weight: 800; letter-spacing: 0.5px; font-size: 1.6rem;
+    }}
+    .header-banner p {{
+        margin: 2px 0 0 0; font-size: 1rem; opacity: 0.95; font-weight: 500;
+    }}
+
     .pimpinan-frame {{
-        width: 100px; height: 100px; border-radius: 15px; border: 3px solid #059669;
+        width: 92px; height: 92px; border-radius: 18px; border: 3px solid #FFFFFF;
         background-image: url("data:image/jpeg;base64,{img_pimpinan}");
         background-size: cover; background-position: center; position: relative;
+        box-shadow: 0 6px 14px rgba(0,0,0,0.2);
     }}
     .logo-mini {{
-        position: absolute; bottom: 5px; right: 5px; width: 30px; height: 30px;
-        background: white; border-radius: 5px; padding: 2px;
+        position: absolute; bottom: -6px; right: -6px; width: 34px; height: 34px;
+        background: white; border-radius: 8px; padding: 3px; box-shadow: 0 2px 6px rgba(0,0,0,0.2);
     }}
-    .price-card {{
-        background: #FFFFFF !important; padding: 15px; border-radius: 12px; 
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 12px; border-left: 5px solid #0369a1;
-    }}
-    .flex-container {{ display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }}
+
+    /* ===== NAV BUTTONS ===== */
     .stButton button {{
+        background-color: #FFFFFF !important; color: #0369a1 !important;
+        border: 1.5px solid #BAE6FD !important;
+        border-radius: 10px !important; transition: 0.25s; padding: 8px 10px;
+        font-weight: 600 !important;
+    }}
+    .stButton button:hover {{
         background-color: #0369a1 !important; color: #FFFFFF !important;
-        border-radius: 8px !important; transition: 0.3s; padding: 5px 10px;
+        border-color: #0369a1 !important;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 14px rgba(3,105,161,0.3);
+    }}
+    div[data-testid="stDownloadButton"] button {{
+        background: linear-gradient(120deg, #0369a1, #059669) !important;
+        color: white !important; border: none !important; font-weight: 700 !important;
+        border-radius: 10px !important; padding: 10px !important;
+    }}
+
+    /* ===== CARDS ===== */
+    .price-card {{
+        background: #FFFFFF !important; padding: 15px; border-radius: 14px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.06); margin-bottom: 12px; border-left: 5px solid #0369a1;
+        transition: 0.2s;
+    }}
+    .price-card:hover {{ box-shadow: 0 8px 18px rgba(0,0,0,0.1); transform: translateY(-2px); }}
+    .flex-container {{ display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }}
+
+    .news-card {{
+        background: #FFFFFF; border-radius: 16px; padding: 18px 20px; margin-bottom: 16px;
+        box-shadow: 0 6px 16px rgba(0,0,0,0.07); border-top: 4px solid #059669;
+        transition: 0.25s;
+    }}
+    .news-card:hover {{ box-shadow: 0 10px 22px rgba(0,0,0,0.12); transform: translateY(-3px); }}
+    .news-date {{
+        display:inline-block; background:#E0F2FE; color:#0369a1 !important; font-weight:700;
+        font-size:0.75rem; padding:3px 10px; border-radius:20px; margin-bottom:8px;
+    }}
+    .news-title {{ font-size: 1.05rem; font-weight: 700; color:#0F172A !important; line-height:1.35; }}
+
+    .rating-badge {{
+        display:inline-block; background:#FEF3C7; color:#92400E !important; font-weight:700;
+        font-size:0.8rem; padding:3px 10px; border-radius:20px; margin-top:8px;
+    }}
+
+    .comment-box {{
+        background:#F8FAFC; border-radius:12px; padding:10px 14px; margin-top:8px;
+        border-left: 3px solid #059669;
+    }}
+    .comment-name {{ font-weight:700; color:#0369a1 !important; font-size:0.9rem; }}
+    .comment-date {{ color:#94A3B8 !important; font-size:0.7rem; }}
+
+    section[data-testid="stExpander"] {{
+        background:#FFFFFF; border-radius:14px !important; border: none !important;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.06); margin-bottom: 14px;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -107,8 +205,12 @@ with st.container():
     with c1:
         st.markdown(f'<div class="pimpinan-frame"><div class="logo-mini"><img src="data:image/png;base64,{img_logo}" width="100%"></div></div>', unsafe_allow_html=True)
     with c2:
-        st.markdown("<h2 style='margin:0;'>KABUPATEN NGADA</h2>", unsafe_allow_html=True)
-        st.markdown("<p style='color:#0369a1; font-weight:bold; margin:0; font-size:1.1rem;'>Bagian Perekonomian & SDA Setda</p>", unsafe_allow_html=True)
+        st.markdown("""
+        <div class="header-banner" style="margin-left:-10px;">
+            <h2>KABUPATEN NGADA</h2>
+            <p>Bagian Perekonomian & SDA Setda</p>
+        </div>
+        """, unsafe_allow_html=True)
 
     st.write("")
     m = st.columns(7)
@@ -124,10 +226,13 @@ if is_admin:
         st.header("🛠️ Admin Editor")
         st.session_state.store["hero_title"] = st.text_input("Judul Utama", st.session_state.store["hero_title"])
         st.session_state.store["hero_subtitle"] = st.text_area("Sub-judul", st.session_state.store["hero_subtitle"])
-        
-        all_items = df_harga['KOMODITAS'].unique().tolist() if not df_harga.empty else []
-        st.session_state.store["tren_pilihan"] = st.multiselect("Komoditas Tren", all_items, default=st.session_state.store["tren_pilihan"])
-        
+
+        st.session_state.store["tren_jumlah"] = st.number_input(
+            "Jumlah Komoditas Trending Ditampilkan", min_value=3, max_value=15,
+            value=st.session_state.store.get("tren_jumlah", 6), step=1,
+            help="Komoditas dipilih otomatis berdasarkan persentase perubahan harga terbesar — tidak perlu dipilih manual."
+        )
+
         st.session_state.store["potensi_pertanian"] = st.text_area("Teks Pertanian", st.session_state.store["potensi_pertanian"])
         st.session_state.store["potensi_pariwisata"] = st.text_area("Teks Pariwisata", st.session_state.store["potensi_pariwisata"])
         st.session_state.store["about_text"] = st.text_area("Tentang Kami", st.session_state.store["about_text"])
@@ -137,13 +242,29 @@ if is_admin:
             st.success("Tersimpan!")
             st.balloons()
 
+        st.divider()
+        st.subheader("💬 Moderasi Komentar")
+        if st.session_state.comments:
+            for k, item in st.session_state.comments.items():
+                title = item.get("title", k)
+                jumlah = len(item.get("entries", []))
+                with st.expander(f"{title} ({jumlah} komentar)"):
+                    for idx, cmt in enumerate(item.get("entries", [])):
+                        st.write(f"⭐ {cmt['rating']} — **{cmt['nama']}**: {cmt['isi']}")
+                        if st.button("🗑️ Hapus", key=f"del_{k}_{idx}"):
+                            item["entries"].pop(idx)
+                            save_comments(st.session_state.comments)
+                            st.rerun()
+        else:
+            st.caption("Belum ada komentar masuk.")
+
 # --- 7. FUNGSI FORMAT HARGA ---
 def format_price_ui(ini, kmrn):
     diff = ini - kmrn
     if diff > 0: color, status, icon = "#EF4444", "NAIK", "▲"
     elif diff < 0: color, status, icon = "#10B981", "TURUN", "▼"
     else: color, status, icon = "#64748B", "STABIL", "—"
-    
+
     return (
         f'<div style="line-height:1.2; margin-top:5px;">'
         f'<div style="font-size: 0.75rem; color: #64748B;">Hari Ini:</div>'
@@ -153,6 +274,79 @@ def format_price_ui(ini, kmrn):
         f'<span style="color:{color}; font-weight:bold; font-size: 0.7rem;">{icon} {status}</span>'
         f'</div></div>'
     )
+
+# --- 7a. FUNGSI TREN OTOMATIS ---
+def compute_trending(df, n=6):
+    """Ambil komoditas dengan persentase perubahan harga terbesar (naik/turun) secara otomatis."""
+    if df.empty:
+        return df
+    d = df[(df['SATUAN'] != 0) & (df['SATUAN'].astype(str) != "0")].copy()
+    if d.empty:
+        return d
+
+    def pct_change(now, prev):
+        return ((now - prev) / prev.replace(0, pd.NA)) * 100
+
+    d['pct_k'] = pct_change(d['K_INI'], d['K_KMRN'])
+    d['pct_b'] = pct_change(d['B_INI'], d['B_KMRN'])
+    d['pct'] = d[['pct_k', 'pct_b']].abs().max(axis=1)
+    d = d.dropna(subset=['pct'])
+    d = d[d['pct'] > 0]
+    d = d.sort_values('pct', ascending=False)
+    return d.head(n)
+
+# --- 7b. FUNGSI KOMENTAR & RATING ---
+def render_stars(value):
+    full = int(round(value))
+    return "⭐" * full + "☆" * (5 - full)
+
+def render_comment_section(key_id, title):
+    if key_id not in st.session_state.comments:
+        st.session_state.comments[key_id] = {"title": title, "entries": []}
+
+    entries = st.session_state.comments[key_id]["entries"]
+
+    if entries:
+        avg = sum(e["rating"] for e in entries) / len(entries)
+        st.markdown(
+            f'<span class="rating-badge">{render_stars(avg)} {avg:.1f}/5 dari {len(entries)} komentar</span>',
+            unsafe_allow_html=True
+        )
+    else:
+        st.caption("Belum ada komentar. Jadilah yang pertama memberi tanggapan!")
+
+    for e in entries[::-1]:
+        st.markdown(f"""
+        <div class="comment-box">
+            <span class="comment-name">{e['nama']}</span> &nbsp;
+            <span style="color:#F59E0B;">{render_stars(e['rating'])}</span><br>
+            <span>{e['isi']}</span><br>
+            <span class="comment-date">{e['tanggal']}</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.write("")
+    with st.form(key=f"form_{key_id}", clear_on_submit=True):
+        nama = st.text_input("Nama Anda", key=f"nama_{key_id}", placeholder="Masukkan nama...")
+        rating = st.radio(
+            "Beri Rating", options=[1, 2, 3, 4, 5], index=4, horizontal=True,
+            format_func=lambda x: "⭐" * x, key=f"rating_{key_id}"
+        )
+        isi = st.text_area("Komentar Anda", key=f"isi_{key_id}", placeholder="Tulis tanggapan atau masukan Anda...")
+        submitted = st.form_submit_button("Kirim Komentar", use_container_width=True)
+        if submitted:
+            if nama.strip() and isi.strip():
+                entries.append({
+                    "nama": nama.strip(),
+                    "rating": rating,
+                    "isi": isi.strip(),
+                    "tanggal": datetime.now().strftime("%d %b %Y, %H:%M")
+                })
+                save_comments(st.session_state.comments)
+                st.success("Terima kasih atas komentar Anda!")
+                st.rerun()
+            else:
+                st.warning("Nama dan komentar tidak boleh kosong.")
 
 # --- 8. LOGIKA HALAMAN ---
 store = st.session_state.store
@@ -192,26 +386,68 @@ elif st.session_state.page == "Harga":
                 """, unsafe_allow_html=True)
 
 elif st.session_state.page == "Tren":
-    st.subheader("📈 Grafik Tren Harga")
+    st.subheader("📈 Tren Harga Otomatis")
+    st.caption("Komoditas berikut dipilih otomatis oleh sistem berdasarkan persentase perubahan harga terbesar dari data terbaru — tidak perlu diatur manual.")
     if not df_harga.empty:
-        pilihan = store["tren_pilihan"] if store["tren_pilihan"] else df_harga['KOMODITAS'].head(5).tolist()
-        df_p = df_harga[df_harga['KOMODITAS'].isin(pilihan)]
-        fig = px.bar(df_p, x='KOMODITAS', y=['K_KMRN', 'K_INI'], barmode='group', labels={'value':'Harga (Rp)', 'variable':'Waktu'})
-        st.plotly_chart(fig, use_container_width=True)
+        n = store.get("tren_jumlah", 6)
+        trending = compute_trending(df_harga, n)
+        if trending.empty:
+            st.info("Belum ada perubahan harga signifikan yang tercatat saat ini.")
+        else:
+            cols = st.columns(3)
+            for i, (_, r) in enumerate(trending.iterrows()):
+                diff = r['K_INI'] - r['K_KMRN']
+                if diff > 0: color, icon, status = "#EF4444", "▲", "NAIK"
+                elif diff < 0: color, icon, status = "#10B981", "▼", "TURUN"
+                else: color, icon, status = "#64748B", "—", "STABIL"
+                with cols[i % 3]:
+                    st.markdown(f"""
+                    <div class="price-card" style="border-left-color:{color};">
+                        <div style="font-weight:700; color:#0369a1; font-size:0.95rem;">{r['KOMODITAS']}</div>
+                        <div style="font-size:1.4rem; font-weight:800; color:{color}; margin-top:4px;">{icon} {r['pct']:.1f}%</div>
+                        <div style="font-size:0.75rem; color:#64748B; margin-top:2px;">{status} · Rp {r['K_INI']:,} /satuan</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            st.write("")
+            fig = px.bar(
+                trending, x='KOMODITAS', y=['K_KMRN', 'K_INI'], barmode='group',
+                labels={'value': 'Harga (Rp)', 'variable': 'Waktu'},
+                color_discrete_sequence=['#94A3B8', '#0369a1']
+            )
+            st.plotly_chart(fig, use_container_width=True)
 
 elif st.session_state.page == "Media":
     st.subheader("📰 Berita Ekonomi & SDA")
     if not df_berita.empty:
         for _, row in df_berita.iloc[::-1].iterrows():
-            with st.expander(f"{row['Tanggal']} - {row['Kegiatan']}"):
-                if "http" in str(row['Link']): st.link_button("Baca Berita", row['Link'])
+            kid = news_key(row)
+            entries = st.session_state.comments.get(kid, {}).get("entries", [])
+            avg_txt = ""
+            if entries:
+                avg = sum(e["rating"] for e in entries) / len(entries)
+                avg_txt = f" &nbsp;·&nbsp; {render_stars(avg)} {avg:.1f} ({len(entries)})"
+
+            st.markdown(f"""
+            <div class="news-card">
+                <span class="news-date">{row['Tanggal']}</span>
+                <div class="news-title">{row['Kegiatan']}{avg_txt}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            with st.expander("💬 Selengkapnya & Komentar"):
+                if "http" in str(row['Link']):
+                    st.link_button("📖 Selengkapnya", row['Link'], use_container_width=True)
+                st.markdown("---")
+                st.markdown("**Komentar Warga**")
+                render_comment_section(kid, row['Kegiatan'])
 
 elif st.session_state.page == "Potensi":
     st.subheader("🏛️ Potensi Daerah Ngada")
     tab1, tab2 = st.tabs(["🌾 Pertanian", "🏞️ Pariwisata"])
     with tab1:
         c_a, c_b = st.columns(2)
-        with c_a: 
+        with c_a:
             if os.path.exists("cengkeh.jpeg"): st.image("cengkeh.jpeg", caption="Cengkeh Ngada")
         with c_b:
             if os.path.exists("sawah ngada.webp"): st.image("sawah ngada.webp", caption="Pertanian")
