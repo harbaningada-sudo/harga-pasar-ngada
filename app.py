@@ -5,14 +5,18 @@ import os
 import base64
 import json
 import hashlib
+import uuid
+import gspread
+from google.oauth2.service_account import Credentials
 from datetime import datetime
 
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(page_title="Portal Ekonomi Ngada", page_icon="🏛️", layout="wide", initial_sidebar_state="collapsed")
 
-# --- 2. SISTEM DATABASE (PERMANEN) ---
+# --- 2. SISTEM DATABASE ---
+# NOTE: settings_db.json TETAP file lokal (biasa dipakai admin sesekali, dampak reset lebih kecil).
+# Jika ingin settings juga permanen, pola yang sama (Google Sheets) bisa diterapkan nanti.
 DB_FILE = "settings_db.json"
-COMMENTS_FILE = "comments_db.json"
 
 def load_settings():
     default_data = {
@@ -37,30 +41,110 @@ def save_settings(data):
     with open(DB_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-def load_comments():
-    if os.path.exists(COMMENTS_FILE):
-        try:
-            with open(COMMENTS_FILE, "r") as f:
-                return json.load(f)
-        except:
-            return {}
-    return {}
-
-def save_comments(data):
-    with open(COMMENTS_FILE, "w") as f:
-        json.dump(data, f, indent=4)
-
 def news_key(row):
     """Bikin ID unik & stabil untuk tiap berita berdasarkan judul+tanggal."""
     raw = f"{row.get('Tanggal','')}-{row.get('Kegiatan','')}"
     return hashlib.md5(raw.encode()).hexdigest()[:10]
 
+# --- 2a. KOMENTAR PERMANEN VIA GOOGLE SHEETS ---
+COMMENTS_SHEET_HEADER = ["id", "key_id", "title", "nama", "rating", "isi", "tanggal", "balasan", "balasan_tanggal"]
+GSHEET_SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+
+@st.cache_resource(show_spinner=False)
+def get_gspread_client():
+    creds = Credentials.from_service_account_info(
+        dict(st.secrets["gcp_service_account"]), scopes=GSHEET_SCOPES
+    )
+    return gspread.authorize(creds)
+
+@st.cache_resource(show_spinner=False)
+def get_comments_ws():
+    client = get_gspread_client()
+    sheet = client.open_by_url(st.secrets["COMMENTS_SHEET_URL"])
+    try:
+        ws = sheet.worksheet("Comments")
+    except gspread.WorksheetNotFound:
+        ws = sheet.add_worksheet(title="Comments", rows=2000, cols=len(COMMENTS_SHEET_HEADER))
+        ws.append_row(COMMENTS_SHEET_HEADER)
+    return ws
+
+def load_comments():
+    """Ambil semua komentar dari Google Sheets dan susun jadi dict per key_id."""
+    try:
+        ws = get_comments_ws()
+        records = ws.get_all_records()
+    except Exception as e:
+        st.warning(f"Gagal memuat komentar dari Google Sheets: {e}")
+        return {}
+
+    data = {}
+    for r in records:
+        k = str(r.get("key_id", "")).strip()
+        if not k:
+            continue
+        if k not in data:
+            data[k] = {"title": r.get("title", k), "entries": []}
+        try:
+            rating_val = int(r.get("rating", 5) or 5)
+        except (ValueError, TypeError):
+            rating_val = 5
+        data[k]["entries"].append({
+            "id": str(r.get("id", "")),
+            "nama": r.get("nama", ""),
+            "rating": rating_val,
+            "isi": r.get("isi", ""),
+            "tanggal": r.get("tanggal", ""),
+            "balasan": r.get("balasan", ""),
+            "balasan_tanggal": r.get("balasan_tanggal", ""),
+        })
+    return data
+
+def add_comment(key_id, title, nama, rating, isi):
+    """Tambah 1 baris komentar baru ke Google Sheets. Return True jika sukses."""
+    try:
+        ws = get_comments_ws()
+        cid = str(uuid.uuid4())[:8]
+        tanggal = datetime.now().strftime("%d %b %Y, %H:%M")
+        ws.append_row([cid, key_id, title, nama, rating, isi, tanggal, "", ""])
+        return True
+    except Exception as e:
+        st.error(f"Gagal menyimpan komentar: {e}")
+        return False
+
+def update_reply(comment_id, balasan):
+    """Update kolom balasan admin untuk 1 komentar berdasarkan id-nya."""
+    try:
+        ws = get_comments_ws()
+        cell = ws.find(comment_id)
+        if cell:
+            tanggal = datetime.now().strftime("%d %b %Y, %H:%M")
+            ws.update_cell(cell.row, COMMENTS_SHEET_HEADER.index("balasan") + 1, balasan)
+            ws.update_cell(cell.row, COMMENTS_SHEET_HEADER.index("balasan_tanggal") + 1, tanggal)
+            return True
+        return False
+    except Exception as e:
+        st.error(f"Gagal menyimpan balasan: {e}")
+        return False
+
+def delete_comment(comment_id):
+    """Hapus 1 baris komentar berdasarkan id-nya."""
+    try:
+        ws = get_comments_ws()
+        cell = ws.find(comment_id)
+        if cell:
+            ws.delete_rows(cell.row)
+            return True
+        return False
+    except Exception as e:
+        st.error(f"Gagal menghapus komentar: {e}")
+        return False
+
 # Inisialisasi State agar tidak NameError
 if "store" not in st.session_state:
     st.session_state.store = load_settings()
 
-if "comments" not in st.session_state:
-    st.session_state.comments = load_comments()
+# Komentar selalu dimuat ulang setiap run supaya data terbaru (termasuk dari pengunjung lain) selalu tampil
+st.session_state.comments = load_comments()
 
 if 'page' not in st.session_state:
     st.session_state.page = "Beranda"
@@ -259,7 +343,8 @@ if is_admin:
                 title = item.get("title", k)
                 jumlah = len(item.get("entries", []))
                 with st.expander(f"{title} ({jumlah} komentar)"):
-                    for idx, cmt in enumerate(item.get("entries", [])):
+                    for cmt in item.get("entries", []):
+                        cid = cmt["id"]
                         st.write(f"⭐ {cmt['rating']} — **{cmt['nama']}**: {cmt['isi']}")
 
                         balasan_existing = cmt.get("balasan", "")
@@ -269,23 +354,20 @@ if is_admin:
                         balasan_baru = st.text_area(
                             "Tulis / edit balasan admin",
                             value=balasan_existing,
-                            key=f"reply_{k}_{idx}",
+                            key=f"reply_{cid}",
                             height=80
                         )
 
                         col_a, col_b = st.columns(2)
                         with col_a:
-                            if st.button("📨 Kirim Balasan", key=f"send_reply_{k}_{idx}", use_container_width=True):
-                                cmt["balasan"] = balasan_baru.strip()
-                                cmt["balasan_tanggal"] = datetime.now().strftime("%d %b %Y, %H:%M")
-                                save_comments(st.session_state.comments)
-                                st.success("Balasan tersimpan!")
-                                st.rerun()
+                            if st.button("📨 Kirim Balasan", key=f"send_reply_{cid}", use_container_width=True):
+                                if update_reply(cid, balasan_baru.strip()):
+                                    st.success("Balasan tersimpan!")
+                                    st.rerun()
                         with col_b:
-                            if st.button("🗑️ Hapus Komentar", key=f"del_{k}_{idx}", use_container_width=True):
-                                item["entries"].pop(idx)
-                                save_comments(st.session_state.comments)
-                                st.rerun()
+                            if st.button("🗑️ Hapus Komentar", key=f"del_{cid}", use_container_width=True):
+                                if delete_comment(cid):
+                                    st.rerun()
                         st.divider()
         else:
             st.caption("Belum ada komentar masuk.")
@@ -333,10 +415,8 @@ def render_stars(value):
     return "⭐" * full + "☆" * (5 - full)
 
 def render_comment_section(key_id, title):
-    if key_id not in st.session_state.comments:
-        st.session_state.comments[key_id] = {"title": title, "entries": []}
-
-    entries = st.session_state.comments[key_id]["entries"]
+    section = st.session_state.comments.get(key_id, {"title": title, "entries": []})
+    entries = section.get("entries", [])
 
     # --- Form komentar ditaruh di ATAS agar mudah diakses tanpa scroll ---
     with st.form(key=f"form_{key_id}", clear_on_submit=True):
@@ -349,17 +429,9 @@ def render_comment_section(key_id, title):
         submitted = st.form_submit_button("Kirim Komentar", use_container_width=True)
         if submitted:
             if nama.strip() and isi.strip():
-                entries.append({
-                    "nama": nama.strip(),
-                    "rating": rating,
-                    "isi": isi.strip(),
-                    "tanggal": datetime.now().strftime("%d %b %Y, %H:%M"),
-                    "balasan": "",
-                    "balasan_tanggal": ""
-                })
-                save_comments(st.session_state.comments)
-                st.success("Terima kasih atas komentar Anda!")
-                st.rerun()
+                if add_comment(key_id, title, nama.strip(), rating, isi.strip()):
+                    st.success("Terima kasih atas komentar Anda!")
+                    st.rerun()
             else:
                 st.warning("Nama dan komentar tidak boleh kosong.")
 
