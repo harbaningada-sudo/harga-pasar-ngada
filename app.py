@@ -23,7 +23,8 @@ def load_settings():
         "about_text": "Bagian Perekonomian dan SDA Setda Ngada. Hadir sebagai pusat informasi, koordinasi, dan fasilitasi pembangunan ekonomi serta pengelolaan sumber daya alam demi kemajuan Kabupaten Ngada",
         "potensi_pertanian": "Ngada unggul di sektor Kopi Arabika, Cengkeh, dan Pertanian Hortikultura.",
         "potensi_pariwisata": "Destinasi ikonik meliputi Kampung Adat Bena dan Taman Laut 17 Pulau Riung.",
-        "tren_jumlah": 6
+        "tren_jumlah": 6,
+        "image_files": {}
     }
     if os.path.exists(DB_FILE):
         try:
@@ -151,6 +152,28 @@ def get_base64(file):
 
 img_pimpinan = get_base64("Bupati-dan-Wakil-Bupati-Ngada-jpg.jpeg")
 img_logo = get_base64("logo_ngada.png")
+
+# --- 3a. GAMBAR YANG BISA DIUPLOAD ADMIN (tanpa perlu push ke GitHub) ---
+# Setiap slot punya file default (bawaan dari GitHub). Jika admin upload gambar baru,
+# nama file custom disimpan di settings_db.json dan dipakai duluan; jika tidak ada / file
+# hilang, otomatis fallback ke file default.
+IMAGE_SLOTS = {
+    "hero":    {"label": "Foto Beranda (Hero)",              "default": "IMG_20251125_111048.jpg"},
+    "cengkeh": {"label": "Pertanian — Cengkeh",               "default": "cengkeh.jpeg"},
+    "sawah":   {"label": "Pertanian — Sawah / Hortikultura",  "default": "sawah ngada.webp"},
+    "bena":    {"label": "Pariwisata — Kampung Adat Bena",    "default": "bena.webp"},
+    "riung":   {"label": "Pariwisata — 17 Pulau Riung",       "default": "17 pulau riung.webp"},
+}
+
+def get_image_path(slot):
+    """Ambil path gambar aktif untuk sebuah slot: custom upload admin (jika ada & valid), else default."""
+    custom = st.session_state.store.get("image_files", {}).get(slot)
+    if custom and os.path.exists(custom):
+        return custom
+    default = IMAGE_SLOTS[slot]["default"]
+    if os.path.exists(default):
+        return default
+    return None
 
 st.markdown(f"""
     <style>
@@ -400,6 +423,38 @@ if is_admin:
             st.balloons()
 
         st.divider()
+        st.subheader("🖼️ Kelola Gambar")
+        st.caption("Unggah gambar untuk mengganti foto di halaman Beranda & Potensi — langsung tersimpan di server, tanpa perlu upload ke GitHub.")
+        for slot, info in IMAGE_SLOTS.items():
+            with st.expander(info["label"]):
+                current_path = get_image_path(slot)
+                if current_path:
+                    st.image(current_path, width=220)
+                else:
+                    st.caption("Belum ada gambar untuk slot ini.")
+
+                uploaded_img = st.file_uploader(
+                    f"Unggah gambar baru — {info['label']}",
+                    type=["jpg", "jpeg", "png", "webp"],
+                    key=f"upload_{slot}"
+                )
+                if uploaded_img is not None:
+                    ext = os.path.splitext(uploaded_img.name)[1].lower()
+                    new_filename = f"custom_{slot}{ext}"
+                    with open(new_filename, "wb") as f:
+                        f.write(uploaded_img.getbuffer())
+                    st.session_state.store.setdefault("image_files", {})[slot] = new_filename
+                    save_settings(st.session_state.store)
+                    st.success(f"{info['label']} berhasil diperbarui!")
+                    st.rerun()
+
+                if st.session_state.store.get("image_files", {}).get(slot):
+                    if st.button("↩️ Kembalikan ke Gambar Default", key=f"reset_img_{slot}", use_container_width=True):
+                        st.session_state.store["image_files"].pop(slot, None)
+                        save_settings(st.session_state.store)
+                        st.rerun()
+
+        st.divider()
         st.subheader("💬 Moderasi & Balasan Komentar")
         if st.session_state.comments:
             for k, item in st.session_state.comments.items():
@@ -535,8 +590,9 @@ if st.session_state.page == "Beranda":
     st.markdown('<span class="section-eyebrow">Portal Resmi</span>', unsafe_allow_html=True)
     st.subheader(store["hero_title"])
     st.info(store["hero_subtitle"])
-    if os.path.exists("IMG_20251125_111048.jpg"):
-        st.image("IMG_20251125_111048.jpg", use_container_width=True)
+    hero_img = get_image_path("hero")
+    if hero_img:
+        st.image(hero_img, use_container_width=True)
 
     st.write("")
     st.markdown('<span class="section-eyebrow">Suara Pengunjung</span>', unsafe_allow_html=True)
@@ -633,16 +689,20 @@ elif st.session_state.page == "Potensi":
     with tab1:
         c_a, c_b = st.columns(2)
         with c_a:
-            if os.path.exists("cengkeh.jpeg"): st.image("cengkeh.jpeg", caption="Cengkeh Ngada")
+            img_cengkeh = get_image_path("cengkeh")
+            if img_cengkeh: st.image(img_cengkeh, caption="Cengkeh Ngada")
         with c_b:
-            if os.path.exists("sawah ngada.webp"): st.image("sawah ngada.webp", caption="Pertanian")
+            img_sawah = get_image_path("sawah")
+            if img_sawah: st.image(img_sawah, caption="Pertanian")
         st.write(store["potensi_pertanian"])
     with tab2:
         c_c, c_d = st.columns(2)
         with c_c:
-            if os.path.exists("bena.webp"): st.image("bena.webp", caption="Kampung Bena")
+            img_bena = get_image_path("bena")
+            if img_bena: st.image(img_bena, caption="Kampung Bena")
         with c_d:
-            if os.path.exists("17 pulau riung.webp"): st.image("17 pulau riung.webp", caption="Riung")
+            img_riung = get_image_path("riung")
+            if img_riung: st.image(img_riung, caption="Riung")
         st.write(store["potensi_pariwisata"])
 
 elif st.session_state.page == "Tentang":
