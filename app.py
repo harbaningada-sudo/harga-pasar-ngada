@@ -67,12 +67,19 @@ def get_comments_ws():
     return ws
 
 def load_comments():
+    """Ambil semua komentar dari Google Sheets (di-cache 20 detik) supaya interaksi
+    admin yang sering (ketik teks, upload gambar, dll) tidak menembak API Google Sheets
+    berkali-kali dan kena limit kuota per menit."""
     try:
-        ws = get_comments_ws()
-        records = ws.get_all_records()
+        return _load_comments_cached()
     except Exception as e:
-        st.warning(f"Gagal memuat komentar dari Google Sheets: {e}")
-        return {}
+        st.session_state["_comments_load_error"] = str(e)
+        return None
+
+@st.cache_data(ttl=20, show_spinner=False)
+def _load_comments_cached():
+    ws = get_comments_ws()
+    records = ws.get_all_records()
 
     data = {}
     for r in records:
@@ -102,6 +109,7 @@ def add_comment(key_id, title, nama, rating, isi):
         cid = str(uuid.uuid4())[:8]
         tanggal = datetime.now().strftime("%d %b %Y, %H:%M")
         ws.append_row([cid, key_id, title, nama, rating, isi, tanggal, "", ""])
+        _load_comments_cached.clear()
         return True
     except Exception as e:
         st.error(f"Gagal menyimpan komentar: {e}")
@@ -115,6 +123,7 @@ def update_reply(comment_id, balasan):
             tanggal = datetime.now().strftime("%d %b %Y, %H:%M")
             ws.update_cell(cell.row, COMMENTS_SHEET_HEADER.index("balasan") + 1, balasan)
             ws.update_cell(cell.row, COMMENTS_SHEET_HEADER.index("balasan_tanggal") + 1, tanggal)
+            _load_comments_cached.clear()
             return True
         return False
     except Exception as e:
@@ -127,6 +136,7 @@ def delete_comment(comment_id):
         cell = ws.find(comment_id)
         if cell:
             ws.delete_rows(cell.row)
+            _load_comments_cached.clear()
             return True
         return False
     except Exception as e:
@@ -137,12 +147,23 @@ def delete_comment(comment_id):
 if "store" not in st.session_state:
     st.session_state.store = load_settings()
 
-st.session_state.comments = load_comments()
+# Jika API sedang kena limit kuota, JANGAN timpa komentar lama dengan kosong —
+# pertahankan data terakhir yang berhasil dimuat supaya tampilan tidak "hilang" tiba-tiba.
+_new_comments = load_comments()
+if _new_comments is not None:
+    st.session_state.comments = _new_comments
+elif "comments" not in st.session_state:
+    st.session_state.comments = {}
 
 if 'page' not in st.session_state:
     st.session_state.page = "Beranda"
 
 is_admin = st.query_params.get("status") == "set"
+
+# Kalau tadi gagal ambil komentar (mis. kena limit kuota Google Sheets sesaat),
+# beri tahu admin saja secara halus — pengunjung biasa tidak perlu lihat pesan teknis ini.
+if is_admin and st.session_state.pop("_comments_load_error", None):
+    st.caption("⚠️ Komentar terbaru belum sempat dimuat ulang (server Google Sheets sedang sibuk). Menampilkan data terakhir yang tersimpan — coba lagi sebentar.")
 
 # --- 3. HELPER GAMBAR & CSS ---
 def get_base64(file):
