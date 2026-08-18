@@ -24,7 +24,17 @@ def load_settings():
         "potensi_pertanian": "Ngada unggul di sektor Kopi Arabika, Cengkeh, dan Pertanian Hortikultura.",
         "potensi_pariwisata": "Destinasi ikonik meliputi Kampung Adat Bena dan Taman Laut 17 Pulau Riung.",
         "tren_jumlah": 6,
-        "image_files": {}
+        "image_files": {},
+        "galeri_potensi": {
+            "pertanian": [
+                {"file": "cengkeh.jpeg", "caption": "Cengkeh Ngada"},
+                {"file": "sawah ngada.webp", "caption": "Pertanian"},
+            ],
+            "pariwisata": [
+                {"file": "bena.webp", "caption": "Kampung Bena"},
+                {"file": "17 pulau riung.webp", "caption": "Riung"},
+            ],
+        }
     }
     if os.path.exists(DB_FILE):
         try:
@@ -175,15 +185,9 @@ img_pimpinan = get_base64("Bupati-dan-Wakil-Bupati-Ngada-jpg.jpeg")
 img_logo = get_base64("logo_ngada.png")
 
 # --- 3a. GAMBAR YANG BISA DIUPLOAD ADMIN (tanpa perlu push ke GitHub) ---
-# Setiap slot punya file default (bawaan dari GitHub). Jika admin upload gambar baru,
-# nama file custom disimpan di settings_db.json dan dipakai duluan; jika tidak ada / file
-# hilang, otomatis fallback ke file default.
+# Foto Beranda: 1 slot, ganti-timpa (seperti sebelumnya).
 IMAGE_SLOTS = {
-    "hero":    {"label": "Foto Beranda (Hero)",              "default": "IMG_20251125_111048.jpg"},
-    "cengkeh": {"label": "Pertanian — Cengkeh",               "default": "cengkeh.jpeg"},
-    "sawah":   {"label": "Pertanian — Sawah / Hortikultura",  "default": "sawah ngada.webp"},
-    "bena":    {"label": "Pariwisata — Kampung Adat Bena",    "default": "bena.webp"},
-    "riung":   {"label": "Pariwisata — 17 Pulau Riung",       "default": "17 pulau riung.webp"},
+    "hero": {"label": "Foto Beranda (Hero)", "default": "IMG_20251125_111048.jpg"},
 }
 
 def get_image_path(slot):
@@ -195,6 +199,45 @@ def get_image_path(slot):
     if os.path.exists(default):
         return default
     return None
+
+# --- 3b. GALERI POTENSI (Pertanian & Pariwisata) — admin bisa TAMBAH banyak foto + keterangan ---
+# Foto lama (Cengkeh, Sawah, Bena, Riung) dijadikan isi awal galeri supaya tampilan awal
+# tidak berubah. Admin tinggal menambah foto baru + keterangan tanpa menghapus yang lama.
+GALERI_DEFAULT = {
+    "pertanian": [
+        {"file": "cengkeh.jpeg", "caption": "Cengkeh Ngada"},
+        {"file": "sawah ngada.webp", "caption": "Pertanian"},
+    ],
+    "pariwisata": [
+        {"file": "bena.webp", "caption": "Kampung Bena"},
+        {"file": "17 pulau riung.webp", "caption": "Riung"},
+    ],
+}
+GALERI_LABELS = {"pertanian": "🌾 Pertanian", "pariwisata": "🏞️ Pariwisata"}
+
+def get_galeri(category):
+    """Ambil daftar foto galeri untuk kategori tertentu, filter yang filenya benar-benar ada di disk."""
+    items = st.session_state.store.get("galeri_potensi", {}).get(category, GALERI_DEFAULT.get(category, []))
+    return [it for it in items if os.path.exists(it.get("file", ""))]
+
+def add_to_galeri(category, filename, caption):
+    galeri = st.session_state.store.setdefault("galeri_potensi", json.loads(json.dumps(GALERI_DEFAULT)))
+    galeri.setdefault(category, []).append({"file": filename, "caption": caption})
+    save_settings(st.session_state.store)
+
+def remove_from_galeri(category, index):
+    galeri = st.session_state.store.get("galeri_potensi", {})
+    items = galeri.get(category, [])
+    if 0 <= index < len(items):
+        removed = items.pop(index)
+        # Hapus file fisik hanya jika itu file upload custom (bukan foto default bawaan GitHub)
+        if removed.get("file", "").startswith("galeri_"):
+            try:
+                if os.path.exists(removed["file"]):
+                    os.remove(removed["file"])
+            except Exception:
+                pass
+        save_settings(st.session_state.store)
 
 st.markdown(f"""
     <style>
@@ -444,8 +487,8 @@ if is_admin:
             st.balloons()
 
         st.divider()
-        st.subheader("🖼️ Kelola Gambar")
-        st.caption("Unggah gambar untuk mengganti foto di halaman Beranda & Potensi — langsung tersimpan di server, tanpa perlu upload ke GitHub.")
+        st.subheader("🖼️ Foto Beranda")
+        st.caption("Ganti foto hero di halaman Beranda — langsung tersimpan di server, tanpa perlu upload ke GitHub.")
         for slot, info in IMAGE_SLOTS.items():
             with st.expander(info["label"]):
                 current_path = get_image_path(slot)
@@ -474,6 +517,47 @@ if is_admin:
                         st.session_state.store["image_files"].pop(slot, None)
                         save_settings(st.session_state.store)
                         st.rerun()
+
+        st.divider()
+        st.subheader("🌄 Galeri Foto Potensi")
+        st.caption("Tambahkan foto baru beserta keterangannya ke halaman Potensi. Foto lama tidak akan terhapus.")
+        for category, label in GALERI_LABELS.items():
+            with st.expander(label, expanded=False):
+                current_items = get_galeri(category)
+                if current_items:
+                    for idx, item in enumerate(current_items):
+                        gcol1, gcol2 = st.columns([1, 2])
+                        with gcol1:
+                            st.image(item["file"], width=110)
+                        with gcol2:
+                            st.caption(item.get("caption", ""))
+                            if st.button("🗑️ Hapus", key=f"del_galeri_{category}_{idx}"):
+                                remove_from_galeri(category, idx)
+                                st.rerun()
+                else:
+                    st.caption("Belum ada foto di galeri ini.")
+
+                st.markdown("**➕ Tambah foto baru**")
+                new_img = st.file_uploader(
+                    f"Pilih foto — {label}",
+                    type=["jpg", "jpeg", "png", "webp"],
+                    key=f"galeri_upload_{category}"
+                )
+                new_caption = st.text_input(
+                    "Keterangan foto (mis. nama tempat/kegiatan)",
+                    key=f"galeri_caption_{category}"
+                )
+                if st.button(f"➕ Tambah ke Galeri {label}", key=f"galeri_add_{category}", use_container_width=True):
+                    if new_img is not None and new_caption.strip():
+                        ext = os.path.splitext(new_img.name)[1].lower()
+                        fname = f"galeri_{category}_{uuid.uuid4().hex[:8]}{ext}"
+                        with open(fname, "wb") as f:
+                            f.write(new_img.getbuffer())
+                        add_to_galeri(category, fname, new_caption.strip())
+                        st.success("Foto berhasil ditambahkan ke galeri!")
+                        st.rerun()
+                    else:
+                        st.warning("Pilih foto dan isi keterangannya terlebih dahulu.")
 
         st.divider()
         st.subheader("💬 Moderasi & Balasan Komentar")
@@ -708,22 +792,24 @@ elif st.session_state.page == "Potensi":
     st.subheader("🏛️ Potensi Daerah Ngada")
     tab1, tab2 = st.tabs(["🌾 Pertanian", "🏞️ Pariwisata"])
     with tab1:
-        c_a, c_b = st.columns(2)
-        with c_a:
-            img_cengkeh = get_image_path("cengkeh")
-            if img_cengkeh: st.image(img_cengkeh, caption="Cengkeh Ngada")
-        with c_b:
-            img_sawah = get_image_path("sawah")
-            if img_sawah: st.image(img_sawah, caption="Pertanian")
+        galeri_pertanian = get_galeri("pertanian")
+        if galeri_pertanian:
+            cols = st.columns(3)
+            for i, item in enumerate(galeri_pertanian):
+                with cols[i % 3]:
+                    st.image(item["file"], caption=item.get("caption", ""), use_container_width=True)
+        else:
+            st.caption("Belum ada foto di galeri Pertanian.")
         st.write(store["potensi_pertanian"])
     with tab2:
-        c_c, c_d = st.columns(2)
-        with c_c:
-            img_bena = get_image_path("bena")
-            if img_bena: st.image(img_bena, caption="Kampung Bena")
-        with c_d:
-            img_riung = get_image_path("riung")
-            if img_riung: st.image(img_riung, caption="Riung")
+        galeri_pariwisata = get_galeri("pariwisata")
+        if galeri_pariwisata:
+            cols = st.columns(3)
+            for i, item in enumerate(galeri_pariwisata):
+                with cols[i % 3]:
+                    st.image(item["file"], caption=item.get("caption", ""), use_container_width=True)
+        else:
+            st.caption("Belum ada foto di galeri Pariwisata.")
         st.write(store["potensi_pariwisata"])
 
 elif st.session_state.page == "Tentang":
