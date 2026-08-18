@@ -14,8 +14,6 @@ from datetime import datetime
 st.set_page_config(page_title="Portal Ekonomi Ngada", page_icon="🏛️", layout="wide", initial_sidebar_state="collapsed")
 
 # --- 2. SISTEM DATABASE ---
-# NOTE: settings_db.json TETAP file lokal (biasa dipakai admin sesekali, dampak reset lebih kecil).
-# Jika ingin settings juga permanen, pola yang sama (Google Sheets) bisa diterapkan nanti.
 DB_FILE = "settings_db.json"
 
 def load_settings():
@@ -42,7 +40,6 @@ def save_settings(data):
         json.dump(data, f, indent=4)
 
 def news_key(row):
-    """Bikin ID unik & stabil untuk tiap berita berdasarkan judul+tanggal."""
     raw = f"{row.get('Tanggal','')}-{row.get('Kegiatan','')}"
     return hashlib.md5(raw.encode()).hexdigest()[:10]
 
@@ -69,7 +66,6 @@ def get_comments_ws():
     return ws
 
 def load_comments():
-    """Ambil semua komentar dari Google Sheets dan susun jadi dict per key_id."""
     try:
         ws = get_comments_ws()
         records = ws.get_all_records()
@@ -100,7 +96,6 @@ def load_comments():
     return data
 
 def add_comment(key_id, title, nama, rating, isi):
-    """Tambah 1 baris komentar baru ke Google Sheets. Return True jika sukses."""
     try:
         ws = get_comments_ws()
         cid = str(uuid.uuid4())[:8]
@@ -112,7 +107,6 @@ def add_comment(key_id, title, nama, rating, isi):
         return False
 
 def update_reply(comment_id, balasan):
-    """Update kolom balasan admin untuk 1 komentar berdasarkan id-nya."""
     try:
         ws = get_comments_ws()
         cell = ws.find(comment_id)
@@ -127,7 +121,6 @@ def update_reply(comment_id, balasan):
         return False
 
 def delete_comment(comment_id):
-    """Hapus 1 baris komentar berdasarkan id-nya."""
     try:
         ws = get_comments_ws()
         cell = ws.find(comment_id)
@@ -143,7 +136,6 @@ def delete_comment(comment_id):
 if "store" not in st.session_state:
     st.session_state.store = load_settings()
 
-# Komentar selalu dimuat ulang setiap run supaya data terbaru (termasuk dari pengunjung lain) selalu tampil
 st.session_state.comments = load_comments()
 
 if 'page' not in st.session_state:
@@ -162,112 +154,183 @@ img_logo = get_base64("logo_ngada.png")
 
 st.markdown(f"""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700;9..144,800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+    :root {{
+        --ngd-forest: #1B4332;
+        --ngd-forest-deep: #0F2E22;
+        --ngd-gold: #B8863B;
+        --ngd-gold-light: #E4C888;
+        --ngd-terracotta: #A6432B;
+        --ngd-paper: #F7F3EA;
+        --ngd-paper-warm: #F1EADA;
+        --ngd-ink: #22201B;
+        --ngd-slate: #5B6660;
+    }}
 
     html, body, [class*="css"] {{
-        font-family: 'Poppins', sans-serif;
+        font-family: 'Plus Jakarta Sans', sans-serif;
     }}
 
     .stApp {{
-        background: linear-gradient(180deg, #EAF6FF 0%, #E0F2FE 40%, #F0F9FF 100%) !important;
+        background:
+            radial-gradient(1200px 600px at 100% -10%, rgba(184,134,59,0.08), transparent),
+            linear-gradient(180deg, var(--ngd-paper) 0%, var(--ngd-paper-warm) 100%) !important;
     }}
     [data-testid="stHeader"] {{ background: rgba(0,0,0,0); }}
-    html, body, [data-testid="stWidgetLabel"], .stText, p, h1, h2, h3, h4, h5, h6, span, div, li {{
-        color: #0F172A !important;
+    html, body, [data-testid="stWidgetLabel"], .stText, p, span, div, li {{
+        color: var(--ngd-ink) !important;
+    }}
+    h1, h2, h3, h4, h5, h6 {{
+        font-family: 'Fraunces', serif !important;
+        color: var(--ngd-forest-deep) !important;
+        font-weight: 700 !important;
+        letter-spacing: -0.01em;
+    }}
+
+    /* ===== IKAT MOTIF DIVIDER ===== */
+    .ikat-rule {{
+        height: 8px;
+        margin: 4px 0 22px 0;
+        border-radius: 4px;
+        background: repeating-linear-gradient(
+            135deg,
+            var(--ngd-gold) 0px, var(--ngd-gold) 10px,
+            var(--ngd-terracotta) 10px, var(--ngd-terracotta) 20px,
+            var(--ngd-forest) 20px, var(--ngd-forest) 30px
+        );
+        opacity: 0.85;
     }}
 
     /* ===== HEADER ===== */
     .header-banner {{
-        background: linear-gradient(120deg, #0369a1 0%, #059669 100%);
-        border-radius: 20px;
-        padding: 22px 28px;
-        box-shadow: 0 10px 25px rgba(3,105,161,0.25);
+        position: relative;
+        overflow: hidden;
+        background: linear-gradient(120deg, var(--ngd-forest-deep) 0%, var(--ngd-forest) 65%, #2D5A46 100%);
+        border-radius: 18px;
+        padding: 24px 30px;
+        box-shadow: 0 14px 30px rgba(15,46,34,0.28);
         margin-bottom: 6px;
+        border: 1px solid rgba(228,200,136,0.25);
     }}
-    .header-banner h2, .header-banner p {{ color: #FFFFFF !important; }}
+    .header-banner::after {{
+        content: "";
+        position: absolute; top: 0; right: 0; bottom: 0; width: 10px;
+        background: repeating-linear-gradient(
+            180deg, var(--ngd-gold) 0px, var(--ngd-gold) 8px,
+            var(--ngd-terracotta) 8px, var(--ngd-terracotta) 16px
+        );
+        opacity: 0.9;
+    }}
+    .header-banner h2, .header-banner p {{ color: #FBF6EA !important; }}
     .header-banner h2 {{
-        margin: 0; font-weight: 800; letter-spacing: 0.5px; font-size: 1.6rem;
+        margin: 0; font-weight: 700 !important; letter-spacing: 0.2px; font-size: 1.65rem;
+        font-family: 'Fraunces', serif !important;
+    }}
+    .header-banner .eyebrow {{
+        display:inline-block; background: var(--ngd-gold); color: #23200F !important;
+        padding: 3px 12px; border-radius: 20px; margin-right: 10px; font-size: 0.72em;
+        font-weight: 800; letter-spacing: 0.6px; vertical-align: middle;
+        font-family: 'Plus Jakarta Sans', sans-serif !important;
     }}
     .header-banner p {{
-        margin: 2px 0 0 0; font-size: 1rem; opacity: 0.95; font-weight: 500;
+        margin: 6px 0 0 0; font-size: 0.98rem; opacity: 0.92; font-weight: 500;
     }}
 
     .pimpinan-frame {{
-        width: 92px; height: 92px; border-radius: 18px; border: 3px solid #FFFFFF;
+        width: 94px; height: 94px; border-radius: 16px; border: 3px solid var(--ngd-gold-light);
         background-image: url("data:image/jpeg;base64,{img_pimpinan}");
         background-size: cover; background-position: center; position: relative;
-        box-shadow: 0 6px 14px rgba(0,0,0,0.2);
+        box-shadow: 0 8px 18px rgba(15,46,34,0.3);
     }}
     .logo-mini {{
         position: absolute; bottom: -6px; right: -6px; width: 34px; height: 34px;
-        background: white; border-radius: 8px; padding: 3px; box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        background: #FBF6EA; border-radius: 8px; padding: 3px; box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+        border: 1px solid var(--ngd-gold);
     }}
 
     /* ===== NAV BUTTONS ===== */
     .stButton button {{
-        background-color: #FFFFFF !important; color: #0369a1 !important;
-        border: 1.5px solid #BAE6FD !important;
-        border-radius: 10px !important; transition: 0.25s; padding: 8px 10px;
-        font-weight: 600 !important;
+        background-color: #FFFFFF !important; color: var(--ngd-forest-deep) !important;
+        border: 1.5px solid #DDD3BC !important;
+        border-radius: 10px !important; transition: 0.25s; padding: 9px 10px;
+        font-weight: 700 !important; font-family: 'Plus Jakarta Sans', sans-serif !important;
+        letter-spacing: 0.2px;
     }}
     .stButton button:hover {{
-        background-color: #0369a1 !important; color: #FFFFFF !important;
-        border-color: #0369a1 !important;
+        background-color: var(--ngd-forest) !important; color: #FBF6EA !important;
+        border-color: var(--ngd-forest) !important;
         transform: translateY(-2px);
-        box-shadow: 0 6px 14px rgba(3,105,161,0.3);
+        box-shadow: 0 8px 16px rgba(27,67,50,0.28);
     }}
     div[data-testid="stDownloadButton"] button {{
-        background: linear-gradient(120deg, #0369a1, #059669) !important;
-        color: white !important; border: none !important; font-weight: 700 !important;
+        background: linear-gradient(120deg, var(--ngd-forest-deep), var(--ngd-forest)) !important;
+        color: #FBF6EA !important; border: 1px solid var(--ngd-gold) !important; font-weight: 700 !important;
         border-radius: 10px !important; padding: 10px !important;
+    }}
+    .stForm button[kind="formSubmit"], button[kind="primary"] {{
+        background: linear-gradient(120deg, var(--ngd-terracotta), var(--ngd-gold)) !important;
+        color: #FBF6EA !important; border: none !important;
     }}
 
     /* ===== CARDS ===== */
     .price-card {{
-        background: #FFFFFF !important; padding: 15px; border-radius: 14px;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.06); margin-bottom: 12px; border-left: 5px solid #0369a1;
+        background: #FFFDF8 !important; padding: 16px 18px; border-radius: 14px;
+        box-shadow: 0 4px 12px rgba(34,32,27,0.06); margin-bottom: 12px;
+        border-left: 5px solid var(--ngd-forest); border: 1px solid #EDE4CE;
         transition: 0.2s;
     }}
-    .price-card:hover {{ box-shadow: 0 8px 18px rgba(0,0,0,0.1); transform: translateY(-2px); }}
+    .price-card:hover {{ box-shadow: 0 10px 22px rgba(34,32,27,0.1); transform: translateY(-2px); }}
     .flex-container {{ display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }}
 
     .news-card {{
-        background: #FFFFFF; border-radius: 16px; padding: 18px 20px; margin-bottom: 16px;
-        box-shadow: 0 6px 16px rgba(0,0,0,0.07); border-top: 4px solid #059669;
+        background: #FFFDF8; border-radius: 16px; padding: 20px 22px; margin-bottom: 16px;
+        box-shadow: 0 6px 16px rgba(34,32,27,0.07); border-top: 4px solid var(--ngd-terracotta);
+        border: 1px solid #EDE4CE; border-top: 4px solid var(--ngd-terracotta);
         transition: 0.25s;
     }}
-    .news-card:hover {{ box-shadow: 0 10px 22px rgba(0,0,0,0.12); transform: translateY(-3px); }}
+    .news-card:hover {{ box-shadow: 0 12px 24px rgba(34,32,27,0.12); transform: translateY(-3px); }}
     .news-date {{
-        display:inline-block; background:#E0F2FE; color:#0369a1 !important; font-weight:700;
-        font-size:0.75rem; padding:3px 10px; border-radius:20px; margin-bottom:8px;
+        display:inline-block; background: var(--ngd-forest); color:#FBF6EA !important; font-weight:700;
+        font-size:0.72rem; padding:4px 12px; border-radius:20px; margin-bottom:10px; letter-spacing: 0.3px;
     }}
-    .news-title {{ font-size: 1.05rem; font-weight: 700; color:#0F172A !important; line-height:1.35; }}
+    .news-title {{ font-size: 1.08rem; font-weight: 700; color: var(--ngd-forest-deep) !important; line-height:1.4;
+        font-family: 'Fraunces', serif !important; }}
 
     .rating-badge {{
-        display:inline-block; background:#FEF3C7; color:#92400E !important; font-weight:700;
-        font-size:0.8rem; padding:3px 10px; border-radius:20px; margin-top:8px;
+        display:inline-block; background: #FCEFD9; color: var(--ngd-terracotta) !important; font-weight:800;
+        font-size:0.82rem; padding:5px 14px; border-radius:20px; margin-top:10px; border: 1px solid #F1D9AC;
     }}
 
     .comment-box {{
-        background:#F8FAFC; border-radius:12px; padding:10px 14px; margin-top:8px;
-        border-left: 3px solid #059669;
+        background:#FFFDF8; border-radius:12px; padding:12px 16px; margin-top:10px;
+        border-left: 3px solid var(--ngd-terracotta); border: 1px solid #EDE4CE; border-left: 3px solid var(--ngd-terracotta);
     }}
-    .comment-name {{ font-weight:700; color:#0369a1 !important; font-size:0.9rem; }}
-    .comment-date {{ color:#94A3B8 !important; font-size:0.7rem; }}
+    .comment-name {{ font-weight:700; color: var(--ngd-forest) !important; font-size:0.9rem; }}
+    .comment-date {{ color:#9A9082 !important; font-size:0.7rem; }}
 
     .reply-box {{
-        background:#EFF6FF; border-radius:12px; padding:10px 14px; margin-top:8px;
-        margin-left: 24px; border-left: 3px solid #0369a1;
+        background:#F2F6F3; border-radius:12px; padding:12px 16px; margin-top:8px;
+        margin-left: 24px; border-left: 3px solid var(--ngd-forest); border: 1px solid #DEE8E1; border-left: 3px solid var(--ngd-forest);
     }}
     .reply-label {{
-        font-weight:700; color:#0369a1 !important; font-size:0.85rem;
+        font-weight:800; color: var(--ngd-forest) !important; font-size:0.85rem;
         display:flex; align-items:center; gap:6px;
     }}
-    .reply-date {{ color:#94A3B8 !important; font-size:0.7rem; }}
+    .reply-date {{ color:#9A9082 !important; font-size:0.7rem; }}
+
+    .section-eyebrow {{
+        display:inline-block; color: var(--ngd-terracotta) !important; font-weight: 800;
+        font-size: 0.78rem; letter-spacing: 1.6px; text-transform: uppercase; margin-bottom: 2px;
+    }}
 
     section[data-testid="stExpander"] {{
-        background:#FFFFFF; border-radius:14px !important; border: none !important;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.06); margin-bottom: 14px;
+        background:#FFFDF8; border-radius:14px !important; border: 1px solid #EDE4CE !important;
+        box-shadow: 0 4px 10px rgba(34,32,27,0.06); margin-bottom: 14px;
+    }}
+
+    [data-testid="stForm"] {{
+        background: #FFFDF8; border: 1px solid #EDE4CE; border-radius: 16px; padding: 18px 20px 6px 20px;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -301,8 +364,8 @@ with st.container():
     with c2:
         st.markdown("""
         <div class="header-banner" style="margin-left:-10px;">
-            <h2><span style="background:rgba(255,255,255,0.25); padding:2px 10px; border-radius:8px; margin-right:8px; font-size:0.85em;">SI-PARI</span>KABUPATEN NGADA</h2>
-            <p>Bagian Perekonomian & SDA Setda</p>
+            <h2><span class="eyebrow">SI-PARI</span>KABUPATEN NGADA</h2>
+            <p>Sistem Informasi Publikasi Harga &middot; Bagian Perekonomian &amp; SDA Setda</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -312,7 +375,7 @@ with st.container():
     for i, p in enumerate(pages):
         if m[i].button(p, key=f"nav_{p}", use_container_width=True):
             st.session_state.page = p
-st.divider()
+st.markdown('<div class="ikat-rule"></div>', unsafe_allow_html=True)
 
 # --- 6. ADMIN PANEL ---
 if is_admin:
@@ -375,23 +438,22 @@ if is_admin:
 # --- 7. FUNGSI FORMAT HARGA ---
 def format_price_ui(ini, kmrn):
     diff = ini - kmrn
-    if diff > 0: color, status, icon = "#EF4444", "NAIK", "▲"
-    elif diff < 0: color, status, icon = "#10B981", "TURUN", "▼"
-    else: color, status, icon = "#64748B", "STABIL", "—"
+    if diff > 0: color, status, icon = "#B3261E", "NAIK", "▲"
+    elif diff < 0: color, status, icon = "#1B4332", "TURUN", "▼"
+    else: color, status, icon = "#8A8272", "STABIL", "—"
 
     return (
         f'<div style="line-height:1.2; margin-top:5px;">'
-        f'<div style="font-size: 0.75rem; color: #64748B;">Hari Ini:</div>'
-        f'<div style="font-size: 1.1rem; font-weight: bold; color: #1E293B;">Rp {ini:,}</div>'
-        f'<div style="font-size: 0.7rem; color: #94A3B8;">Lalu: Rp {kmrn:,}</div>'
-        f'<div style="margin-top: 5px; padding: 2px 6px; border-radius: 4px; background: {color}15; display: inline-block;">'
-        f'<span style="color:{color}; font-weight:bold; font-size: 0.7rem;">{icon} {status}</span>'
+        f'<div style="font-size: 0.75rem; color: #8A8272;">Hari Ini:</div>'
+        f'<div style="font-size: 1.12rem; font-weight: 800; color: #22201B;">Rp {ini:,}</div>'
+        f'<div style="font-size: 0.7rem; color: #9A9082;">Lalu: Rp {kmrn:,}</div>'
+        f'<div style="margin-top: 6px; padding: 2px 8px; border-radius: 4px; background: {color}18; display: inline-block;">'
+        f'<span style="color:{color}; font-weight:800; font-size: 0.7rem;">{icon} {status}</span>'
         f'</div></div>'
     )
 
 # --- 7a. FUNGSI TREN OTOMATIS ---
 def compute_trending(df, n=6):
-    """Ambil komoditas dengan persentase perubahan harga terbesar (naik/turun) secara otomatis."""
     if df.empty:
         return df
     d = df[(df['SATUAN'] != 0) & (df['SATUAN'].astype(str) != "0")].copy()
@@ -418,7 +480,6 @@ def render_comment_section(key_id, title):
     section = st.session_state.comments.get(key_id, {"title": title, "entries": []})
     entries = section.get("entries", [])
 
-    # --- Form komentar ditaruh di ATAS agar mudah diakses tanpa scroll ---
     with st.form(key=f"form_{key_id}", clear_on_submit=True):
         nama = st.text_input("Nama Anda", key=f"nama_{key_id}", placeholder="Masukkan nama...")
         rating = st.radio(
@@ -437,7 +498,6 @@ def render_comment_section(key_id, title):
 
     st.write("")
 
-    # --- Daftar komentar & balasan ditaruh di BAWAH form ---
     if entries:
         avg = sum(e["rating"] for e in entries) / len(entries)
         st.markdown(
@@ -451,7 +511,7 @@ def render_comment_section(key_id, title):
         st.markdown(f"""
         <div class="comment-box">
             <span class="comment-name">{e['nama']}</span> &nbsp;
-            <span style="color:#F59E0B;">{render_stars(e['rating'])}</span><br>
+            <span style="color:#B8863B;">{render_stars(e['rating'])}</span><br>
             <span>{e['isi']}</span><br>
             <span class="comment-date">{e['tanggal']}</span>
         </div>
@@ -472,38 +532,41 @@ def render_comment_section(key_id, title):
 store = st.session_state.store
 
 if st.session_state.page == "Beranda":
+    st.markdown('<span class="section-eyebrow">Portal Resmi</span>', unsafe_allow_html=True)
     st.subheader(store["hero_title"])
     st.info(store["hero_subtitle"])
     if os.path.exists("IMG_20251125_111048.jpg"):
         st.image("IMG_20251125_111048.jpg", use_container_width=True)
 
     st.write("")
+    st.markdown('<span class="section-eyebrow">Suara Pengunjung</span>', unsafe_allow_html=True)
     st.markdown("### 💬 Komentar & Rating Pengunjung")
     st.caption("Berikan penilaian dan masukan Anda terhadap website Portal Ekonomi Ngada ini.")
     render_comment_section("website_umum", "Portal Ekonomi Ngada")
 
 elif st.session_state.page == "Harga":
+    st.markdown('<span class="section-eyebrow">Data Pasar Terkini</span>', unsafe_allow_html=True)
     st.markdown("### 🛍️ Pantauan Harga Pasar")
     query = st.text_input("🔍 Cari Nama Komoditas...", "").lower()
     if not df_harga.empty:
         filtered = df_harga[df_harga['KOMODITAS'].str.lower().str.contains(query)]
         for _, r in filtered.iterrows():
             if r['SATUAN'] == 0 or str(r['SATUAN']) == "0":
-                st.markdown(f"<div style='background:#0369a1; color:white; padding:8px 15px; border-radius:8px; margin-top:20px; font-weight:bold;'>📂 {r['KOMODITAS']}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='background:linear-gradient(120deg,#0F2E22,#1B4332); color:#FBF6EA; padding:9px 16px; border-radius:8px; margin-top:22px; font-weight:700; letter-spacing:0.3px;'>📂 {r['KOMODITAS']}</div>", unsafe_allow_html=True)
             else:
                 st.markdown(f"""
                 <div class="price-card">
                     <div class="flex-container">
                         <div style="flex: 1.2; min-width:100px;">
-                            <div style="font-size: 1.1rem; font-weight: bold; color: #0369a1; line-height:1.2;">{r['KOMODITAS']}</div>
-                            <div style="font-size: 0.85rem; color: #64748B; margin-top:4px;">Satuan: {r['SATUAN']}</div>
+                            <div style="font-size: 1.1rem; font-weight: 800; color: #1B4332; line-height:1.2; font-family:'Fraunces',serif;">{r['KOMODITAS']}</div>
+                            <div style="font-size: 0.85rem; color: #8A8272; margin-top:4px;">Satuan: {r['SATUAN']}</div>
                         </div>
-                        <div style="flex: 1; border-left: 1px solid #eee; padding-left: 12px;">
-                            <div style="font-size: 0.65rem; font-weight: bold; color: #475569; letter-spacing:0.5px;">PEDAGANG BESAR</div>
+                        <div style="flex: 1; border-left: 1px solid #EDE4CE; padding-left: 12px;">
+                            <div style="font-size: 0.65rem; font-weight: 800; color: #5B6660; letter-spacing:0.5px;">PEDAGANG BESAR</div>
                             {format_price_ui(r['B_INI'], r['B_KMRN'])}
                         </div>
-                        <div style="flex: 1; border-left: 1px solid #eee; padding-left: 12px;">
-                            <div style="font-size: 0.65rem; font-weight: bold; color: #475569; letter-spacing:0.5px;">PEDAGANG KECIL</div>
+                        <div style="flex: 1; border-left: 1px solid #EDE4CE; padding-left: 12px;">
+                            <div style="font-size: 0.65rem; font-weight: 800; color: #5B6660; letter-spacing:0.5px;">PEDAGANG KECIL</div>
                             {format_price_ui(r['K_INI'], r['K_KMRN'])}
                         </div>
                     </div>
@@ -511,6 +574,7 @@ elif st.session_state.page == "Harga":
                 """, unsafe_allow_html=True)
 
 elif st.session_state.page == "Tren":
+    st.markdown('<span class="section-eyebrow">Analitik Harga</span>', unsafe_allow_html=True)
     st.subheader("📈 Tren Harga Otomatis")
     st.caption("Komoditas berikut dipilih otomatis oleh sistem berdasarkan persentase perubahan harga terbesar dari data terbaru — tidak perlu diatur manual.")
     if not df_harga.empty:
@@ -522,15 +586,15 @@ elif st.session_state.page == "Tren":
             cols = st.columns(3)
             for i, (_, r) in enumerate(trending.iterrows()):
                 diff = r['K_INI'] - r['K_KMRN']
-                if diff > 0: color, icon, status = "#EF4444", "▲", "NAIK"
-                elif diff < 0: color, icon, status = "#10B981", "▼", "TURUN"
-                else: color, icon, status = "#64748B", "—", "STABIL"
+                if diff > 0: color, icon, status = "#B3261E", "▲", "NAIK"
+                elif diff < 0: color, icon, status = "#1B4332", "▼", "TURUN"
+                else: color, icon, status = "#8A8272", "—", "STABIL"
                 with cols[i % 3]:
                     st.markdown(f"""
                     <div class="price-card" style="border-left-color:{color};">
-                        <div style="font-weight:700; color:#0369a1; font-size:0.95rem;">{r['KOMODITAS']}</div>
-                        <div style="font-size:1.4rem; font-weight:800; color:{color}; margin-top:4px;">{icon} {r['pct']:.1f}%</div>
-                        <div style="font-size:0.75rem; color:#64748B; margin-top:2px;">{status} · Rp {r['K_INI']:,} /satuan</div>
+                        <div style="font-weight:800; color:#1B4332; font-size:0.95rem; font-family:'Fraunces',serif;">{r['KOMODITAS']}</div>
+                        <div style="font-size:1.45rem; font-weight:800; color:{color}; margin-top:4px;">{icon} {r['pct']:.1f}%</div>
+                        <div style="font-size:0.75rem; color:#8A8272; margin-top:2px;">{status} · Rp {r['K_INI']:,} /satuan</div>
                     </div>
                     """, unsafe_allow_html=True)
 
@@ -538,11 +602,17 @@ elif st.session_state.page == "Tren":
             fig = px.bar(
                 trending, x='KOMODITAS', y=['K_KMRN', 'K_INI'], barmode='group',
                 labels={'value': 'Harga (Rp)', 'variable': 'Waktu'},
-                color_discrete_sequence=['#94A3B8', '#0369a1']
+                color_discrete_sequence=['#B8863B', '#1B4332']
+            )
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(family="Plus Jakarta Sans, sans-serif", color="#22201B"),
+                legend_title_text=''
             )
             st.plotly_chart(fig, use_container_width=True)
 
 elif st.session_state.page == "Media":
+    st.markdown('<span class="section-eyebrow">Publikasi</span>', unsafe_allow_html=True)
     st.subheader("📰 Berita Ekonomi & SDA")
     if not df_berita.empty:
         for _, row in df_berita.iloc[::-1].iterrows():
@@ -557,6 +627,7 @@ elif st.session_state.page == "Media":
                 st.link_button("📖 Selengkapnya", row['Link'], use_container_width=True)
 
 elif st.session_state.page == "Potensi":
+    st.markdown('<span class="section-eyebrow">Kekayaan Daerah</span>', unsafe_allow_html=True)
     st.subheader("🏛️ Potensi Daerah Ngada")
     tab1, tab2 = st.tabs(["🌾 Pertanian", "🏞️ Pariwisata"])
     with tab1:
@@ -575,7 +646,10 @@ elif st.session_state.page == "Potensi":
         st.write(store["potensi_pariwisata"])
 
 elif st.session_state.page == "Tentang":
+    st.markdown('<span class="section-eyebrow">Profil Instansi</span>', unsafe_allow_html=True)
     st.markdown(f"### Profil Bagian Perekonomian & SDA\n\n{store['about_text']}")
 
 elif st.session_state.page == "Unduh":
+    st.markdown('<span class="section-eyebrow">Ekspor Data</span>', unsafe_allow_html=True)
+    st.subheader("📥 Unduh Data")
     st.download_button("📥 Download Data Harga (CSV)", df_harga.to_csv(index=False), "harga_pasar_ngada.csv", use_container_width=True)
