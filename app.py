@@ -6,6 +6,7 @@ import base64
 import json
 import hashlib
 import uuid
+import re
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
@@ -24,17 +25,6 @@ def load_settings():
         "potensi_pertanian": "Ngada unggul di sektor Kopi Arabika, Cengkeh, dan Pertanian Hortikultura.",
         "potensi_pariwisata": "Destinasi ikonik meliputi Kampung Adat Bena dan Taman Laut 17 Pulau Riung.",
         "tren_jumlah": 6,
-        "image_files": {},
-        "galeri_potensi": {
-            "pertanian": [
-                {"file": "cengkeh.jpeg", "caption": "Cengkeh Ngada"},
-                {"file": "sawah ngada.webp", "caption": "Pertanian"},
-            ],
-            "pariwisata": [
-                {"file": "bena.webp", "caption": "Kampung Bena"},
-                {"file": "17 pulau riung.webp", "caption": "Riung"},
-            ],
-        }
     }
     if os.path.exists(DB_FILE):
         try:
@@ -184,25 +174,155 @@ def get_base64(file):
 img_pimpinan = get_base64("Bupati-dan-Wakil-Bupati-Ngada-jpg.jpeg")
 img_logo = get_base64("logo_ngada.png")
 
-# --- 3a. GAMBAR YANG BISA DIUPLOAD ADMIN (tanpa perlu push ke GitHub) ---
-# Foto Beranda: 1 slot, ganti-timpa (seperti sebelumnya).
+# --- 3a. GAMBAR YANG DIUPLOAD ADMIN — DISIMPAN PERMANEN DI GOOGLE SHEETS ---
+# PENTING: sebelumnya gambar disimpan di disk server, yang RESET setiap Streamlit Cloud
+# tidur/redeploy — makanya sering "hilang keesokan harinya". Sekarang gambar (versi
+# terkompresi) disimpan sebagai teks base64 di worksheet "Images" pada Spreadsheet yang
+# sama dengan komentar, jadi permanen persis seperti komentar tidak pernah hilang.
+IMAGES_SHEET_HEADER = ["id", "target", "caption", "data_b64", "mime", "tanggal"]
+
+@st.cache_resource(show_spinner=False)
+def get_images_ws():
+    client = get_gspread_client()
+    sheet = client.open_by_url(st.secrets["COMMENTS_SHEET_URL"])
+    try:
+        ws = sheet.worksheet("Images")
+    except gspread.WorksheetNotFound:
+        ws = sheet.add_worksheet(title="Images", rows=500, cols=len(IMAGES_SHEET_HEADER))
+        ws.append_row(IMAGES_SHEET_HEADER)
+    return ws
+
+def load_images():
+    try:
+        return _load_images_cached()
+    except Exception as e:
+        st.session_state["_images_load_error"] = str(e)
+        return None
+
+@st.cache_data(ttl=20, show_spinner=False)
+def _load_images_cached():
+    ws = get_images_ws()
+    records = ws.get_all_records()
+    hero = None
+    galeri = {"pertanian": [], "pariwisata": []}
+    for r in records:
+        target = str(r.get("target", "")).strip()
+        entry = {
+            "id": str(r.get("id", "")),
+            "caption": r.get("caption", ""),
+            "data_b64": r.get("data_b64", ""),
+            "mime": r.get("mime", "image/jpeg"),
+        }
+        if target == "hero":
+            hero = entry  # kalau ada beberapa baris hero (seharusnya tidak), pakai yang terakhir
+        elif target == "galeri:pertanian":
+            galeri["pertanian"].append(entry)
+        elif target == "galeri:pariwisata":
+            galeri["pariwisata"].append(entry)
+    return {"hero": hero, "galeri": galeri}
+
+def compress_image_for_sheets(file_bytes, max_chars=45000):
+    """Resize & kompres gambar supaya base64-nya muat di 1 sel Google Sheets (limit 50.000 karakter)."""
+    from PIL import Image
+    import io as _io
+    img = Image.open(_io.BytesIO(file_bytes))
+    if img.mode in ("RGBA", "P", "LA"):
+        img = img.convert("RGB")
+    max_width, quality = 1000, 82
+    for _ in range(12):
+        if img.size[0] > max_width:
+            ratio = max_width / float(img.size[0])
+            resized = img.resize((max_width, max(1, int(img.size[1] * ratio))))
+        else:
+            resized = img
+        buf = _io.BytesIO()
+        resized.save(buf, format="JPEG", quality=quality, optimize=True)
+        b64 = base64.b64encode(buf.getvalue()).decode()
+        if len(b64) <= max_chars:
+            return b64, "image/jpeg"
+        if quality > 30:
+            quality -= 15
+        else:
+            max_width = int(max_width * 0.75)
+            quality = 60
+    return b64, "image/jpeg"  # fallback: kirim yang terkecil yang berhasil dibuat
+
+def add_image_record(target, caption, file_bytes):
+    try:
+        b64, mime = compress_image_for_sheets(file_bytes)
+        ws = get_images_ws()
+        rid = str(uuid.uuid4())[:8]
+        tanggal = datetime.now().strftime("%d %b %Y, %H:%M")
+        ws.append_row([rid, target, caption, b64, mime, tanggal])
+        _load_images_cached.clear()
+        return True
+    except Exception as e:
+        st.error(f"Gagal menyimpan gambar: {e}")
+        return False
+
+def delete_image_record(record_id):
+    try:
+        ws = get_images_ws()
+        cell = ws.find(record_id)
+        if cell:
+            ws.delete_rows(cell.row)
+            _load_images_cached.clear()
+            return True
+        return False
+    except Exception as e:
+        st.error(f"Gagal menghapus gambar: {e}")
+        return False
+
+def set_hero_image(file_bytes):
+    """Ganti foto hero: hapus baris 'hero' lama dulu (biar sheet tidak menumpuk), lalu simpan yang baru."""
+    try:
+        ws = get_images_ws()
+        for cell in sorted(ws.findall("hero"), key=lambda c: c.row, reverse=True):
+            if cell.col == 2:  # kolom "target"
+                ws.delete_rows(cell.row)
+        b64, mime = compress_image_for_sheets(file_bytes)
+        rid = str(uuid.uuid4())[:8]
+        tanggal = datetime.now().strftime("%d %b %Y, %H:%M")
+        ws.append_row([rid, "hero", "", b64, mime, tanggal])
+        _load_images_cached.clear()
+        return True
+    except Exception as e:
+        st.error(f"Gagal menyimpan foto beranda: {e}")
+        return False
+
+def reset_hero_image():
+    try:
+        ws = get_images_ws()
+        for cell in sorted(ws.findall("hero"), key=lambda c: c.row, reverse=True):
+            if cell.col == 2:
+                ws.delete_rows(cell.row)
+        _load_images_cached.clear()
+        return True
+    except Exception as e:
+        st.error(f"Gagal mereset foto beranda: {e}")
+        return False
+
+# Foto default bawaan repo (fallback kalau admin belum pernah upload foto sendiri).
 IMAGE_SLOTS = {
     "hero": {"label": "Foto Beranda (Hero)", "default": "IMG_20251125_111048.jpg"},
 }
 
 def get_image_path(slot):
-    """Ambil path gambar aktif untuk sebuah slot: custom upload admin (jika ada & valid), else default."""
-    custom = st.session_state.store.get("image_files", {}).get(slot)
-    if custom and os.path.exists(custom):
-        return custom
+    """Prioritas: gambar yang diupload admin (permanen di Google Sheets) > foto default dari repo."""
+    images_data = load_images()
+    if images_data and images_data.get("hero") and slot == "hero":
+        try:
+            return base64.b64decode(images_data["hero"]["data_b64"])
+        except Exception:
+            pass
     default = IMAGE_SLOTS[slot]["default"]
     if os.path.exists(default):
         return default
     return None
 
 # --- 3b. GALERI POTENSI (Pertanian & Pariwisata) — admin bisa TAMBAH banyak foto + keterangan ---
-# Foto lama (Cengkeh, Sawah, Bena, Riung) dijadikan isi awal galeri supaya tampilan awal
-# tidak berubah. Admin tinggal menambah foto baru + keterangan tanpa menghapus yang lama.
+# Foto lama (Cengkeh, Sawah, Bena, Riung) dari repo tetap tampil duluan sebagai bawaan.
+# Foto yang ditambah admin lewat form disimpan permanen di Google Sheets (worksheet "Images").
 GALERI_DEFAULT = {
     "pertanian": [
         {"file": "cengkeh.jpeg", "caption": "Cengkeh Ngada"},
@@ -216,28 +336,23 @@ GALERI_DEFAULT = {
 GALERI_LABELS = {"pertanian": "🌾 Pertanian", "pariwisata": "🏞️ Pariwisata"}
 
 def get_galeri(category):
-    """Ambil daftar foto galeri untuk kategori tertentu, filter yang filenya benar-benar ada di disk."""
-    items = st.session_state.store.get("galeri_potensi", {}).get(category, GALERI_DEFAULT.get(category, []))
-    return [it for it in items if os.path.exists(it.get("file", ""))]
-
-def add_to_galeri(category, filename, caption):
-    galeri = st.session_state.store.setdefault("galeri_potensi", json.loads(json.dumps(GALERI_DEFAULT)))
-    galeri.setdefault(category, []).append({"file": filename, "caption": caption})
-    save_settings(st.session_state.store)
-
-def remove_from_galeri(category, index):
-    galeri = st.session_state.store.get("galeri_potensi", {})
-    items = galeri.get(category, [])
-    if 0 <= index < len(items):
-        removed = items.pop(index)
-        # Hapus file fisik hanya jika itu file upload custom (bukan foto default bawaan GitHub)
-        if removed.get("file", "").startswith("galeri_"):
+    """Gabungkan foto bawaan repo (permanen via git) + foto upload admin (permanen via Google Sheets)."""
+    items = []
+    for it in GALERI_DEFAULT.get(category, []):
+        if os.path.exists(it["file"]):
+            items.append({"src": it["file"], "caption": it["caption"], "record_id": None})
+    images_data = load_images()
+    if images_data:
+        for entry in images_data["galeri"].get(category, []):
             try:
-                if os.path.exists(removed["file"]):
-                    os.remove(removed["file"])
+                items.append({
+                    "src": base64.b64decode(entry["data_b64"]),
+                    "caption": entry.get("caption", ""),
+                    "record_id": entry["id"],
+                })
             except Exception:
                 pass
-        save_settings(st.session_state.store)
+    return items
 
 st.markdown(f"""
     <style>
@@ -488,7 +603,7 @@ if is_admin:
 
         st.divider()
         st.subheader("🖼️ Foto Beranda")
-        st.caption("Ganti foto hero di halaman Beranda — langsung tersimpan di server, tanpa perlu upload ke GitHub.")
+        st.caption("Foto disimpan permanen di Google Sheets (sama seperti komentar) — tidak akan hilang meski aplikasi tidur/redeploy.")
         for slot, info in IMAGE_SLOTS.items():
             with st.expander(info["label"]):
                 current_path = get_image_path(slot)
@@ -503,24 +618,19 @@ if is_admin:
                     key=f"upload_{slot}"
                 )
                 if uploaded_img is not None:
-                    ext = os.path.splitext(uploaded_img.name)[1].lower()
-                    new_filename = f"custom_{slot}{ext}"
-                    with open(new_filename, "wb") as f:
-                        f.write(uploaded_img.getbuffer())
-                    st.session_state.store.setdefault("image_files", {})[slot] = new_filename
-                    save_settings(st.session_state.store)
-                    st.success(f"{info['label']} berhasil diperbarui!")
-                    st.rerun()
-
-                if st.session_state.store.get("image_files", {}).get(slot):
-                    if st.button("↩️ Kembalikan ke Gambar Default", key=f"reset_img_{slot}", use_container_width=True):
-                        st.session_state.store["image_files"].pop(slot, None)
-                        save_settings(st.session_state.store)
+                    if set_hero_image(uploaded_img.getvalue()):
+                        st.success(f"{info['label']} berhasil diperbarui & tersimpan permanen!")
                         st.rerun()
+
+                _hero_data = load_images()
+                if _hero_data and _hero_data.get("hero"):
+                    if st.button("↩️ Kembalikan ke Gambar Default", key=f"reset_img_{slot}", use_container_width=True):
+                        if reset_hero_image():
+                            st.rerun()
 
         st.divider()
         st.subheader("🌄 Galeri Foto Potensi")
-        st.caption("Tambahkan foto baru beserta keterangannya ke halaman Potensi. Foto lama tidak akan terhapus.")
+        st.caption("Tambahkan foto baru beserta keterangannya ke halaman Potensi — tersimpan permanen di Google Sheets. Foto bawaan (dari repo) tidak akan terhapus.")
         for category, label in GALERI_LABELS.items():
             with st.expander(label, expanded=False):
                 current_items = get_galeri(category)
@@ -528,12 +638,15 @@ if is_admin:
                     for idx, item in enumerate(current_items):
                         gcol1, gcol2 = st.columns([1, 2])
                         with gcol1:
-                            st.image(item["file"], width=110)
+                            st.image(item["src"], width=110)
                         with gcol2:
                             st.caption(item.get("caption", ""))
-                            if st.button("🗑️ Hapus", key=f"del_galeri_{category}_{idx}"):
-                                remove_from_galeri(category, idx)
-                                st.rerun()
+                            if item.get("record_id"):
+                                if st.button("🗑️ Hapus", key=f"del_galeri_{category}_{idx}"):
+                                    if delete_image_record(item["record_id"]):
+                                        st.rerun()
+                            else:
+                                st.caption("_(foto bawaan repo, tidak bisa dihapus dari sini)_")
                 else:
                     st.caption("Belum ada foto di galeri ini.")
 
@@ -549,13 +662,9 @@ if is_admin:
                 )
                 if st.button(f"➕ Tambah ke Galeri {label}", key=f"galeri_add_{category}", use_container_width=True):
                     if new_img is not None and new_caption.strip():
-                        ext = os.path.splitext(new_img.name)[1].lower()
-                        fname = f"galeri_{category}_{uuid.uuid4().hex[:8]}{ext}"
-                        with open(fname, "wb") as f:
-                            f.write(new_img.getbuffer())
-                        add_to_galeri(category, fname, new_caption.strip())
-                        st.success("Foto berhasil ditambahkan ke galeri!")
-                        st.rerun()
+                        if add_image_record(f"galeri:{category}", new_caption.strip(), new_img.getvalue()):
+                            st.success("Foto berhasil ditambahkan & tersimpan permanen!")
+                            st.rerun()
                     else:
                         st.warning("Pilih foto dan isi keterangannya terlebih dahulu.")
 
@@ -775,6 +884,17 @@ elif st.session_state.page == "Tren":
 elif st.session_state.page == "Media":
     st.markdown('<span class="section-eyebrow">Publikasi</span>', unsafe_allow_html=True)
     st.subheader("📰 Berita Ekonomi & SDA")
+
+    def _is_youtube(url):
+        return bool(re.search(r"(youtube\.com/watch|youtu\.be/|youtube\.com/embed/|youtube\.com/shorts/)", url, re.I))
+
+    def _drive_file_id(url):
+        m = re.search(r"/d/([a-zA-Z0-9_-]+)", url) or re.search(r"[?&]id=([a-zA-Z0-9_-]+)", url)
+        return m.group(1) if m else None
+
+    def _is_pdf(url, tipe):
+        return url.lower().endswith(".pdf") or "pdf" in tipe
+
     if not df_berita.empty:
         for _, row in df_berita.iloc[::-1].iterrows():
             st.markdown(f"""
@@ -784,8 +904,24 @@ elif st.session_state.page == "Media":
             </div>
             """, unsafe_allow_html=True)
 
-            if "http" in str(row['Link']):
-                st.link_button("📖 Selengkapnya", row['Link'], use_container_width=True)
+            link = str(row.get('Link', '')).strip()
+            tipe = str(row.get('Tipe', '')).strip().lower()
+
+            if link and "http" in link:
+                if _is_youtube(link):
+                    # Video YouTube langsung diputar di halaman, tinggal klik play.
+                    st.video(link)
+                elif _is_pdf(link, tipe):
+                    drive_id = _drive_file_id(link)
+                    embed_src = f"https://drive.google.com/file/d/{drive_id}/preview" if drive_id else link
+                    st.markdown(
+                        f'<iframe src="{embed_src}" width="100%" height="480" '
+                        f'style="border:none;border-radius:12px;margin-top:6px;"></iframe>',
+                        unsafe_allow_html=True
+                    )
+                    st.link_button("⬇️ Buka / Unduh PDF", link, use_container_width=True)
+                else:
+                    st.link_button("📖 Selengkapnya", link, use_container_width=True)
 
 elif st.session_state.page == "Potensi":
     st.markdown('<span class="section-eyebrow">Kekayaan Daerah</span>', unsafe_allow_html=True)
@@ -797,7 +933,7 @@ elif st.session_state.page == "Potensi":
             cols = st.columns(3)
             for i, item in enumerate(galeri_pertanian):
                 with cols[i % 3]:
-                    st.image(item["file"], caption=item.get("caption", ""), use_container_width=True)
+                    st.image(item["src"], caption=item.get("caption", ""), use_container_width=True)
         else:
             st.caption("Belum ada foto di galeri Pertanian.")
         st.write(store["potensi_pertanian"])
@@ -807,7 +943,7 @@ elif st.session_state.page == "Potensi":
             cols = st.columns(3)
             for i, item in enumerate(galeri_pariwisata):
                 with cols[i % 3]:
-                    st.image(item["file"], caption=item.get("caption", ""), use_container_width=True)
+                    st.image(item["src"], caption=item.get("caption", ""), use_container_width=True)
         else:
             st.caption("Belum ada foto di galeri Pariwisata.")
         st.write(store["potensi_pariwisata"])
