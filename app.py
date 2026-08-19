@@ -8,8 +8,6 @@ import hashlib
 import uuid
 import re
 import gspread
-import requests
-from bs4 import BeautifulSoup
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 
@@ -317,211 +315,129 @@ def get_galeri(category):
     return items
 
 # ============================================================================
-# --- 2d. INFLASI KABUPATEN NGADA — DITARIK OTOMATIS DARI BPS TIAP BULAN ---
-# Sumber: ngadakab.bps.go.id (Berita Resmi Statistik). Data disimpan permanen
-# di worksheet "Inflasi" pada Spreadsheet yang sama dengan Comments & Images,
-# jadi historinya menumpuk otomatis tiap bulan dan tidak pernah hilang.
+# --- 2d. INFLASI & IHK — DIAMBIL LANGSUNG DARI SPREADSHEET ANDA ---
+# Tidak lagi scraping BPS. Data diambil live dari Google Sheet milik user,
+# sheet "Inflasi 2026" (angka inflasi + keterangan/penyebab) dan
+# "IHK 2026" (Indeks Harga Konsumen), digabung berdasarkan kolom "Bulan".
+#
+# PENTING: spreadsheet sumber harus di-Share ke email service account yang
+# sama dipakai untuk Comments/Images (lihat st.secrets["gcp_service_account"]),
+# minimal akses "Viewer", supaya bisa dibaca oleh aplikasi ini.
 # ============================================================================
 
-BPS_LIST_URL = "https://ngadakab.bps.go.id/id/pressrelease"
-BPS_BASE_URL = "https://ngadakab.bps.go.id"
-BPS_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; PortalEkonomiNgada/1.0)"}
-
-INFLASI_SHEET_HEADER = [
-    "bulan_tahun", "urutan", "bulan", "tahun", "ihk",
-    "inflasi_yoy", "arah_mtm", "inflasi_mtm", "arah_ytd", "inflasi_ytd",
-    "penyebab_naik", "penyebab_turun", "catatan_admin",
-    "sumber_url", "pdf_url", "tanggal_rilis", "tanggal_scrape",
-]
+INFLASI_SPREADSHEET_URL = st.secrets.get(
+    "INFLASI_SHEET_URL",
+    "https://docs.google.com/spreadsheets/d/1KZg710gSU-5pAQoqJIlwxKLEeAlIQbTbAOjjeGwy0iw/edit?usp=sharing",
+)
+SHEET_NAME_INFLASI = "Inflasi 2026"
+SHEET_NAME_IHK = "IHK 2026"
 
 BULAN_ID = ["januari", "februari", "maret", "april", "mei", "juni", "juli",
             "agustus", "september", "oktober", "november", "desember"]
 
 @st.cache_resource(show_spinner=False)
-def get_inflasi_ws():
+def get_inflasi_spreadsheet():
     client = get_gspread_client()
-    sheet = client.open_by_url(st.secrets["COMMENTS_SHEET_URL"])
-    try:
-        ws = sheet.worksheet("Inflasi")
-    except gspread.WorksheetNotFound:
-        ws = sheet.add_worksheet(title="Inflasi", rows=500, cols=len(INFLASI_SHEET_HEADER))
-        ws.append_row(INFLASI_SHEET_HEADER)
-    return ws
-
-def load_inflasi_history():
-    try:
-        return _load_inflasi_history_cached()
-    except Exception as e:
-        st.session_state["_inflasi_load_error"] = str(e)
-        return None
-
-@st.cache_data(ttl=300, show_spinner=False)
-def _load_inflasi_history_cached():
-    ws = get_inflasi_ws()
-    records = ws.get_all_records()
-    if not records:
-        return pd.DataFrame()
-    df = pd.DataFrame(records)
-    df = df.sort_values("urutan")
-    return df.reset_index(drop=True)
+    return client.open_by_url(INFLASI_SPREADSHEET_URL)
 
 def _parse_id_number(value):
-    v = str(value).replace(",", ".").strip()
+    v = str(value).replace(",", ".").replace("%", "").strip()
     try:
         return float(v)
     except ValueError:
         return None
 
-def scrape_latest_inflasi():
-    """Ambil rilis inflasi BPS Ngada TERBARU dari halaman arsip Berita Resmi
-    Statistik, lalu ekstrak angka & penyebabnya. Mengembalikan dict, atau
-    None kalau gagal (situs berubah format / sedang down / dsb)."""
-    resp = requests.get(BPS_LIST_URL, headers=BPS_HEADERS, timeout=20)
-    resp.raise_for_status()
-    soup = BeautifulSoup(resp.text, "html.parser")
+def _find_col(columns, keywords):
+    """Cari nama kolom asli (dari header sheet) yang mengandung salah satu keyword,
+    supaya nama kolom di spreadsheet tidak harus persis sama (case-insensitive)."""
+    for col in columns:
+        low = str(col).strip().lower()
+        for kw in keywords:
+            if kw in low:
+                return col
+    return None
 
-    kandidat = []
-    for a in soup.find_all("a", href=True):
-        href = a["href"]
-        teks = a.get_text(" ", strip=True)
-        m = re.search(r"/pressrelease/(\d{4})/(\d{2})/(\d{2})/(\d+)/", href)
-        if not m:
-            continue
-        if "inflasi" not in teks.lower() and "inflasi" not in href.lower():
-            continue
-        tahun, bulan_num, tgl, rid = m.groups()
-        url_lengkap = href if href.startswith("http") else BPS_BASE_URL + href
-        kandidat.append(((int(tahun), int(bulan_num), int(tgl), int(rid)), url_lengkap))
+def _worksheet_to_df(sheet_name):
+    """Baca 1 worksheet jadi DataFrame. Baris header dideteksi otomatis
+    (baris pertama yang memuat kata 'bulan') supaya tahan terhadap judul
+    atau baris kosong di atas tabel data."""
+    ss = get_inflasi_spreadsheet()
+    ws = ss.worksheet(sheet_name)
+    values = ws.get_all_values()
 
-    if not kandidat:
-        return None
-    kandidat.sort(key=lambda x: x[0], reverse=True)
-    url_rilis = kandidat[0][1]
-
-    resp2 = requests.get(url_rilis, headers=BPS_HEADERS, timeout=20)
-    resp2.raise_for_status()
-    soup2 = BeautifulSoup(resp2.text, "html.parser")
-    teks = soup2.get_text("\n", strip=True)
-
-    hasil = {
-        "sumber_url": url_rilis,
-        "pdf_url": "",
-        "tanggal_rilis": "",
-        "tanggal_scrape": datetime.now().strftime("%d %b %Y, %H:%M"),
-    }
-
-    for a in soup2.find_all("a", href=True):
-        if "unduh berita resmi statistik" in a.get_text(" ", strip=True).lower():
-            hasil["pdf_url"] = a["href"]
+    header_idx = None
+    for i, row in enumerate(values):
+        if any("bulan" in str(c).strip().lower() for c in row):
+            header_idx = i
             break
+    if header_idx is None:
+        return pd.DataFrame()
 
-    m_tgl = re.search(r"Tanggal Rilis\s*:?\s*\n?\s*([0-9]{1,2}\s+\w+\s+\d{4})", teks, re.IGNORECASE)
-    if m_tgl:
-        hasil["tanggal_rilis"] = m_tgl.group(1)
+    header = [str(c).strip() for c in values[header_idx]]
+    rows = values[header_idx + 1:]
+    df = pd.DataFrame(rows, columns=header)
+    df = df.loc[:, [c for c in df.columns if c != ""]]
+    df = df[df.apply(lambda r: any(str(x).strip() for x in r), axis=1)]
+    return df.reset_index(drop=True)
 
-    m_utama = re.search(
-        r"Pada\s+(\w+)\s+(\d{4})\s+terjadi inflasi year on year\s*\(y-on-y\)\s*"
-        r"Kabupaten Ngada sebesar\s+([\d,]+)\s*persen dengan Indeks Harga Konsumen\s*"
-        r"\(IHK\)\s*sebesar\s+([\d,]+)",
-        teks, re.IGNORECASE,
-    )
-    if not m_utama:
-        return None
+def _bulan_sort_key(bulan_text):
+    low = str(bulan_text).strip().lower()
+    for i, nama in enumerate(BULAN_ID):
+        if nama in low:
+            return i
+    return 99
 
-    bulan_txt, tahun_txt, inflasi_yoy, ihk = m_utama.groups()
-    bulan_lower = bulan_txt.lower()
-    if bulan_lower not in BULAN_ID:
-        return None
-    bulan_num = BULAN_ID.index(bulan_lower) + 1
+def _build_inflasi_gabungan():
+    """Gabungkan sheet 'Inflasi 2026' & 'IHK 2026' jadi satu tabel: Bulan,
+    Inflasi (%), IHK, dan Keterangan (penyebab) — diurutkan Januari-Desember."""
+    df_inf = _worksheet_to_df(SHEET_NAME_INFLASI)
+    df_ihk = _worksheet_to_df(SHEET_NAME_IHK)
 
-    hasil.update({
-        "bulan": bulan_txt.capitalize(),
-        "tahun": tahun_txt,
-        "bulan_tahun": f"{bulan_txt.capitalize()} {tahun_txt}",
-        "urutan": f"{tahun_txt}{bulan_num:02d}",
-        "ihk": ihk,
-        "inflasi_yoy": inflasi_yoy,
-    })
+    if df_inf.empty:
+        return pd.DataFrame()
 
-    m_mtm = re.search(
-        r"tingkat (inflasi|deflasi) month to month\s*\(m-to-m\)\s*sebesar\s+([\d,]+)\s*persen",
-        teks, re.IGNORECASE,
-    )
-    hasil["arah_mtm"] = m_mtm.group(1).lower() if m_mtm else ""
-    hasil["inflasi_mtm"] = m_mtm.group(2) if m_mtm else ""
+    col_bulan_inf = _find_col(df_inf.columns, ["bulan"])
+    col_inflasi = _find_col(df_inf.columns, ["inflasi", "%"])
+    col_keterangan = _find_col(df_inf.columns, ["keterangan", "penyebab", "catatan"])
 
-    m_ytd = re.search(
-        r"tingkat (inflasi|deflasi) year to date\s*\(y-to-d\)\s*sebesar\s+([\d,]+)\s*persen",
-        teks, re.IGNORECASE,
-    )
-    hasil["arah_ytd"] = m_ytd.group(1).lower() if m_ytd else ""
-    hasil["inflasi_ytd"] = m_ytd.group(2) if m_ytd else ""
+    if not col_bulan_inf or not col_inflasi:
+        return pd.DataFrame()
 
-    m_sebab = re.search(
-        r"(Inflasi y-on-y terjadi karena.*?)(?:Pada\s+(?:bulan\s+)?\w+\s+\d{4}\s+secara month to month|$)",
-        teks, re.DOTALL | re.IGNORECASE,
-    )
-    naik_list, turun_list = [], []
-    if m_sebab:
-        blok = m_sebab.group(1)
-        bagian = re.split(
-            r"Sementara itu,?\s*kelompok pengeluaran lain mengalami penurunan,?\s*yaitu\s*",
-            blok, maxsplit=1, flags=re.IGNORECASE,
-        )
-        teks_naik = bagian[0]
-        teks_turun = bagian[1] if len(bagian) > 1 else ""
-        naik_list = re.findall(r"kelompok\s+([^,;]+?)\s+sebesar\s+([\d,]+)\s*persen", teks_naik, re.IGNORECASE)
-        turun_list = re.findall(r"kelompok\s+([^,;]+?)\s+sebesar\s+([\d,]+)\s*persen", teks_turun, re.IGNORECASE)
+    keep_cols = [col_bulan_inf, col_inflasi] + ([col_keterangan] if col_keterangan else [])
+    df = df_inf[keep_cols].copy()
+    df.columns = ["Bulan", "Inflasi (%)"] + (["Keterangan"] if col_keterangan else [])
+    if "Keterangan" not in df.columns:
+        df["Keterangan"] = ""
 
-    hasil["penyebab_naik"] = json.dumps(naik_list)
-    hasil["penyebab_turun"] = json.dumps(turun_list)
-    hasil["catatan_admin"] = ""
-    return hasil
+    if not df_ihk.empty:
+        col_bulan_ihk = _find_col(df_ihk.columns, ["bulan"])
+        col_ihk = _find_col(df_ihk.columns, ["ihk"])
+        if col_bulan_ihk and col_ihk:
+            df_ihk_slim = df_ihk[[col_bulan_ihk, col_ihk]].copy()
+            df_ihk_slim.columns = ["Bulan", "IHK"]
+            df = df.merge(df_ihk_slim, on="Bulan", how="left")
+    if "IHK" not in df.columns:
+        df["IHK"] = ""
 
-@st.cache_data(ttl=21600, show_spinner=False)  # cek situs BPS maksimal tiap 6 jam
-def _scrape_latest_inflasi_cached():
-    return scrape_latest_inflasi()
+    df = df[df["Bulan"].astype(str).str.strip() != ""].copy()
+    df["Inflasi_num"] = df["Inflasi (%)"].apply(_parse_id_number)
+    df["_urut"] = df["Bulan"].apply(_bulan_sort_key)
+    df = df.sort_values("_urut").drop(columns="_urut").reset_index(drop=True)
+    return df
 
-def sync_inflasi_data():
-    """Cek rilis terbaru BPS; kalau bulan itu belum pernah tersimpan, simpan
-    permanen ke Google Sheets. Aman dipanggil tiap kali app dibuka — tidak
-    akan dobel entri dan tidak menimpa catatan_admin yang sudah diisi manual."""
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_inflasi_gabungan_cached():
+    return _build_inflasi_gabungan()
+
+def load_inflasi_gabungan():
+    """Ambil data inflasi+IHK gabungan (di-cache 5 menit). Kalau gagal (mis.
+    sheet belum di-share, atau nama sheet/kolom tidak cocok), simpan pesan
+    errornya supaya bisa ditampilkan ke admin, dan kembalikan tabel kosong."""
     try:
-        data_baru = _scrape_latest_inflasi_cached()
+        return _load_inflasi_gabungan_cached()
     except Exception as e:
-        st.session_state["_inflasi_scrape_error"] = str(e)
-        return False
-
-    if not data_baru:
-        st.session_state["_inflasi_scrape_error"] = "Format halaman BPS tidak dikenali atau situs tidak dapat diakses."
-        return False
-
-    try:
-        ws = get_inflasi_ws()
-        existing = ws.col_values(1)  # kolom bulan_tahun
-        if data_baru["bulan_tahun"] not in existing:
-            row = [data_baru.get(col, "") for col in INFLASI_SHEET_HEADER]
-            ws.append_row(row)
-            _load_inflasi_history_cached.clear()
-            return True
-        return False
-    except Exception as e:
-        st.session_state["_inflasi_scrape_error"] = f"Gagal menyimpan: {e}"
-        return False
-
-def update_inflasi_catatan(bulan_tahun, catatan):
-    try:
-        ws = get_inflasi_ws()
-        cell = ws.find(bulan_tahun)
-        if cell:
-            col_idx = INFLASI_SHEET_HEADER.index("catatan_admin") + 1
-            ws.update_cell(cell.row, col_idx, catatan)
-            _load_inflasi_history_cached.clear()
-            return True
-        return False
-    except Exception as e:
-        st.error(f"Gagal menyimpan catatan: {e}")
-        return False
+        st.session_state["_inflasi_load_error"] = str(e)
+        return pd.DataFrame()
 
 
 # Inisialisasi State agar tidak NameError
@@ -535,12 +451,6 @@ if _new_comments is not None:
     st.session_state.comments = _new_comments
 elif "comments" not in st.session_state:
     st.session_state.comments = {}
-
-# Sinkronisasi data inflasi BPS — cukup sekali per sesi, dibatasi cache 6 jam
-# di dalam fungsinya sendiri supaya situs BPS tidak dibebani tiap refresh.
-if "inflasi_synced" not in st.session_state:
-    sync_inflasi_data()
-    st.session_state.inflasi_synced = True
 
 if 'page' not in st.session_state:
     st.session_state.page = "Beranda"
@@ -876,47 +786,25 @@ if is_admin:
                         st.warning("Pilih foto dan isi keterangannya terlebih dahulu.")
 
         st.divider()
-        st.subheader("📊 Data Inflasi BPS")
-        st.caption("Ditarik otomatis tiap bulan dari ngadakab.bps.go.id. Sistem mengecek rilis baru maksimal tiap 6 jam.")
+        st.subheader("📊 Data Inflasi & IHK (dari Spreadsheet)")
+        st.caption("Diambil langsung dari sheet 'Inflasi 2026' & 'IHK 2026' di spreadsheet Anda. Edit angka/keterangannya di spreadsheet, lalu klik refresh di bawah — tidak perlu diisi ulang di sini.")
+        st.link_button("📝 Buka Spreadsheet Sumber Data", INFLASI_SPREADSHEET_URL, use_container_width=True)
 
-        if st.session_state.pop("_inflasi_scrape_error", None):
-            st.warning("⚠️ Gagal mengambil data terbaru dari BPS secara otomatis barusan. Data lama (kalau ada) tetap ditampilkan ke pengunjung. Coba klik cek ulang, atau isi manual di bawah kalau perlu.")
+        if st.session_state.pop("_inflasi_load_error", None):
+            st.warning("⚠️ Gagal membaca data dari spreadsheet. Pastikan: (1) spreadsheet sudah di-Share ke email service account (lihat Google Cloud service account di secrets), (2) nama sheet persis 'Inflasi 2026' dan 'IHK 2026', (3) masing-masing sheet punya kolom yang memuat kata 'Bulan'.")
 
-        if st.button("🔄 Cek Rilis BPS Sekarang", use_container_width=True):
-            _scrape_latest_inflasi_cached.clear()
-            if sync_inflasi_data():
-                st.success("Data inflasi baru ditemukan & tersimpan!")
-                st.rerun()
-            else:
-                st.info("Belum ada rilis baru dari BPS, atau data bulan ini sudah tersimpan sebelumnya.")
+        if st.button("🔄 Muat Ulang dari Spreadsheet", use_container_width=True):
+            _load_inflasi_gabungan_cached.clear()
+            st.rerun()
 
-        df_inflasi_admin = load_inflasi_history()
-        if df_inflasi_admin is not None and not df_inflasi_admin.empty:
-            terakhir_admin = df_inflasi_admin.iloc[-1]
-            st.write(f"**Data terakhir:** {terakhir_admin['bulan_tahun']} — Inflasi y-on-y {terakhir_admin['inflasi_yoy']}%, IHK {terakhir_admin['ihk']}")
-
-            naik_admin = json.loads(terakhir_admin.get("penyebab_naik") or "[]")
-            turun_admin = json.loads(terakhir_admin.get("penyebab_turun") or "[]")
-            if naik_admin or turun_admin:
-                st.caption("Penyebab berhasil diambil otomatis dari halaman BPS ✅")
-            else:
-                st.caption("BPS belum mencantumkan rincian penyebab di halaman web bulan ini. Isi ringkasannya secara manual di bawah (baca dari PDF resmi BPS).")
-
-            catatan_baru = st.text_area(
-                "Catatan penyebab (opsional, tampil di Beranda)",
-                value=terakhir_admin.get("catatan_admin", ""),
-                key="catatan_inflasi_admin",
-                height=100,
+        df_inflasi_admin = load_inflasi_gabungan()
+        if not df_inflasi_admin.empty:
+            st.dataframe(
+                df_inflasi_admin[["Bulan", "Inflasi (%)", "IHK", "Keterangan"]],
+                use_container_width=True, hide_index=True,
             )
-            if st.button("💾 Simpan Catatan Penyebab", use_container_width=True):
-                if update_inflasi_catatan(terakhir_admin["bulan_tahun"], catatan_baru.strip()):
-                    st.success("Catatan tersimpan!")
-                    st.rerun()
-
-            if terakhir_admin.get("pdf_url"):
-                st.link_button("⬇️ Buka PDF Resmi BRS Bulan Ini", terakhir_admin["pdf_url"], use_container_width=True)
         else:
-            st.caption("Belum ada data inflasi tersimpan. Klik 'Cek Rilis BPS Sekarang' di atas.")
+            st.caption("Belum ada data terbaca. Pastikan sheet 'Inflasi 2026' dan 'IHK 2026' sudah terisi dan spreadsheet sudah dibagikan ke service account.")
 
         st.divider()
         st.subheader("💬 Moderasi & Balasan Komentar")
@@ -1059,35 +947,31 @@ if st.session_state.page == "Beranda":
         st.image(hero_img, use_container_width=True)
 
     # ------------------------------------------------------------------
-    # INFLASI KABUPATEN NGADA (otomatis dari BPS)
+    # INFLASI & IHK KABUPATEN NGADA (sumber: spreadsheet pribadi)
     # ------------------------------------------------------------------
     st.write("")
-    st.markdown('<span class="section-eyebrow">Data Resmi BPS</span>', unsafe_allow_html=True)
-    st.markdown("### 📊 Inflasi Kabupaten Ngada")
+    st.markdown('<span class="section-eyebrow">Data Inflasi</span>', unsafe_allow_html=True)
+    st.markdown("### 📊 Inflasi & IHK Kabupaten Ngada 2026")
 
-    df_inflasi = load_inflasi_history()
-    if df_inflasi is None or df_inflasi.empty:
-        st.info("Data inflasi belum tersedia. Sistem akan mengambilnya otomatis dari BPS Kabupaten Ngada saat tersedia.")
+    df_inflasi = load_inflasi_gabungan()
+    if is_admin and st.session_state.get("_inflasi_load_error"):
+        st.caption("⚠️ Data inflasi belum sempat dimuat dari spreadsheet — lihat detail error di panel Admin.")
+
+    if df_inflasi.empty:
+        st.info("Data inflasi belum tersedia. Pastikan sheet 'Inflasi 2026' dan 'IHK 2026' pada spreadsheet Anda sudah terisi dan sudah dibagikan ke akun aplikasi.")
     else:
         terakhir = df_inflasi.iloc[-1]
 
-        c1, c2, c3 = st.columns(3)
-        c1.metric(f"Inflasi y-on-y — {terakhir['bulan_tahun']}", f"{terakhir['inflasi_yoy']}%")
-        if terakhir.get("inflasi_mtm"):
-            tanda = "+" if terakhir.get("arah_mtm") == "inflasi" else "-"
-            c2.metric("Bulan ke Bulan (m-to-m)", f"{tanda}{terakhir['inflasi_mtm']}%")
-        if terakhir.get("inflasi_ytd"):
-            tanda = "+" if terakhir.get("arah_ytd") == "inflasi" else "-"
-            c3.metric("Sejak Awal Tahun (y-to-d)", f"{tanda}{terakhir['inflasi_ytd']}%")
+        c1, c2 = st.columns(2)
+        nilai_inflasi = terakhir["Inflasi (%)"]
+        c1.metric(f"Inflasi — {terakhir['Bulan']}", f"{nilai_inflasi}%" if str(nilai_inflasi).strip() else "-")
+        if str(terakhir.get("IHK", "")).strip():
+            c2.metric("Indeks Harga Konsumen (IHK)", f"{terakhir['IHK']}")
 
-        st.caption(f"Indeks Harga Konsumen (IHK): {terakhir['ihk']} · Sumber: BPS Kabupaten Ngada, rilis {terakhir.get('tanggal_rilis','-')}")
-
-        if len(df_inflasi) >= 2:
-            df_chart = df_inflasi.copy()
-            df_chart["inflasi_yoy_num"] = df_chart["inflasi_yoy"].apply(_parse_id_number)
+        if df_inflasi["Inflasi_num"].notna().sum() >= 1:
             fig_inf = px.line(
-                df_chart, x="bulan_tahun", y="inflasi_yoy_num", markers=True,
-                labels={"bulan_tahun": "", "inflasi_yoy_num": "Inflasi y-on-y (%)"},
+                df_inflasi, x="Bulan", y="Inflasi_num", markers=True,
+                labels={"Bulan": "", "Inflasi_num": "Inflasi (%)"},
             )
             fig_inf.update_traces(line_color="#A6432B")
             fig_inf.update_layout(
@@ -1097,43 +981,21 @@ if st.session_state.page == "Beranda":
             )
             st.plotly_chart(fig_inf, use_container_width=True)
 
-        naik = json.loads(terakhir.get("penyebab_naik") or "[]")
-        turun = json.loads(terakhir.get("penyebab_turun") or "[]")
-        catatan_admin = terakhir.get("catatan_admin", "")
-
-        if naik or turun:
-            colx, coly = st.columns(2)
-            with colx:
-                st.markdown("**📈 Kelompok pengeluaran yang naik**")
-                if naik:
-                    for nama, persen in naik:
-                        st.write(f"- {nama.strip().capitalize()}: {persen}%")
-                else:
-                    st.caption("Tidak ada data.")
-            with coly:
-                st.markdown("**📉 Kelompok pengeluaran yang turun**")
-                if turun:
-                    for nama, persen in turun:
-                        st.write(f"- {nama.strip().capitalize()}: {persen}%")
-                else:
-                    st.caption("Tidak ada data.")
-
-        if catatan_admin:
+        keterangan = str(terakhir.get("Keterangan", "")).strip()
+        if keterangan:
             st.markdown(f"""
             <div class="price-card">
-                <strong>Catatan Bagian Perekonomian & SDA:</strong><br>{catatan_admin}
+                <strong>Keterangan / Penyebab Inflasi — {terakhir['Bulan']}:</strong><br>{keterangan}
             </div>
             """, unsafe_allow_html=True)
-        elif not (naik or turun):
-            st.caption("Rincian penyebab kenaikan/penurunan harga bulan ini belum dicantumkan BPS di halaman ringkasan — lihat PDF resmi di bawah.")
+        else:
+            st.caption("Belum ada keterangan penyebab inflasi untuk bulan ini di spreadsheet.")
 
-        bcol1, bcol2 = st.columns(2)
-        with bcol1:
-            if terakhir.get("sumber_url"):
-                st.link_button("📄 Baca Rilis Resmi BPS", terakhir["sumber_url"], use_container_width=True)
-        with bcol2:
-            if terakhir.get("pdf_url"):
-                st.link_button("⬇️ Unduh PDF Resmi (BRS)", terakhir["pdf_url"], use_container_width=True)
+        with st.expander("📋 Lihat rincian tiap bulan"):
+            st.dataframe(
+                df_inflasi[["Bulan", "Inflasi (%)", "IHK", "Keterangan"]],
+                use_container_width=True, hide_index=True,
+            )
 
     # ------------------------------------------------------------------
 
