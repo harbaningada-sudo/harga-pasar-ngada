@@ -347,39 +347,6 @@ def _parse_id_number(value):
     except ValueError:
         return None
 
-def _find_col(columns, keywords):
-    """Cari nama kolom asli (dari header sheet) yang mengandung salah satu keyword,
-    supaya nama kolom di spreadsheet tidak harus persis sama (case-insensitive)."""
-    for col in columns:
-        low = str(col).strip().lower()
-        for kw in keywords:
-            if kw in low:
-                return col
-    return None
-
-def _worksheet_to_df(sheet_name):
-    """Baca 1 worksheet jadi DataFrame. Baris header dideteksi otomatis
-    (baris pertama yang memuat kata 'bulan') supaya tahan terhadap judul
-    atau baris kosong di atas tabel data."""
-    ss = get_inflasi_spreadsheet()
-    ws = ss.worksheet(sheet_name)
-    values = ws.get_all_values()
-
-    header_idx = None
-    for i, row in enumerate(values):
-        if any("bulan" in str(c).strip().lower() for c in row):
-            header_idx = i
-            break
-    if header_idx is None:
-        return pd.DataFrame()
-
-    header = [str(c).strip() for c in values[header_idx]]
-    rows = values[header_idx + 1:]
-    df = pd.DataFrame(rows, columns=header)
-    df = df.loc[:, [c for c in df.columns if c != ""]]
-    df = df[df.apply(lambda r: any(str(x).strip() for x in r), axis=1)]
-    return df.reset_index(drop=True)
-
 def _bulan_sort_key(bulan_text):
     low = str(bulan_text).strip().lower()
     for i, nama in enumerate(BULAN_ID):
@@ -387,52 +354,160 @@ def _bulan_sort_key(bulan_text):
             return i
     return 99
 
+def _cell(row, idx):
+    return str(row[idx]).strip() if idx < len(row) else ""
+
+def _match_year_header(text, tahun="2026"):
+    """Cek apakah sebuah sel adalah header tahun/bulan-tahun yang mengarah ke
+    `tahun` (mis. '2026', 'Juni 2026', 'Juni Tahun 2026'). Mengembalikan
+    (cocok: bool, nama_bulan_atau_None)."""
+    t = str(text).strip()
+    if not t:
+        return False, None
+    if re.fullmatch(r"\d{4}", t):
+        return t == tahun, None
+    m = re.match(r"^([A-Za-zÀ-ÿ]+)\s*(?:Tahun)?\s*(\d{4})$", t, re.IGNORECASE)
+    if m and m.group(2) == tahun:
+        return True, m.group(1).strip().capitalize()
+    return False, None
+
+def _parse_inflasi_2026_sheet(values, tahun="2026"):
+    """Sheet 'Inflasi 2026' berpola: header 'Bulan Tahun 2026' di kolom C/D,
+    lalu baris di bawahnya berlabel 'Inflasi (Yoy)' / 'Inflasi (MtM)' (kolom B)
+    dengan nilai persen di kolom yang sama dengan header. Kembalikan dict:
+    bulan -> {"yoy":.., "mtm":.., "keterangan":..}."""
+    hasil = {}
+    n = len(values)
+    for i, row in enumerate(values):
+        for j, cell in enumerate(row):
+            is_match, bulan = _match_year_header(cell, tahun)
+            if not (is_match and bulan):
+                continue
+            for k in range(i + 1, min(i + 6, n)):
+                label = _cell(values[k], 1)
+                val = _cell(values[k], j)
+                if not label or not val:
+                    continue
+                low = label.lower()
+                entry = hasil.setdefault(bulan, {})
+                if "yoy" in low:
+                    entry["yoy"] = val
+                elif "mtm" in low:
+                    entry["mtm"] = val
+                elif any(kw in low for kw in ["keterangan", "penyebab", "catatan"]):
+                    entry["keterangan"] = val
+    return hasil
+
+def _parse_ihk_2026_sheet(values, tahun="2026"):
+    """Sheet 'IHK 2026' punya dua pola sekaligus:
+    (a) header cuma tahun ('2026') diikuti banyak baris nama bulan+nilai, atau
+    (b) header 'Bulan 2026' langsung diikuti 1 baris berlabel 'IHK'+nilai.
+    Kembalikan dict: bulan -> nilai IHK."""
+    hasil = {}
+    n = len(values)
+    i = 0
+    while i < n:
+        row = values[i]
+        matched_col, bulan_header = None, None
+        for j, cell in enumerate(row):
+            is_match, bulan = _match_year_header(cell, tahun)
+            if is_match:
+                matched_col, bulan_header = j, bulan
+                break
+        if matched_col is None:
+            i += 1
+            continue
+
+        if bulan_header:
+            for k in range(i + 1, min(i + 4, n)):
+                label = _cell(values[k], 1)
+                val = _cell(values[k], matched_col)
+                if label and val and "ihk" in label.lower():
+                    hasil[bulan_header] = val
+                    break
+        else:
+            k = i + 1
+            while k < n:
+                label = _cell(values[k], 1)
+                val = _cell(values[k], matched_col)
+                low = label.lower()
+                if any(b in low for b in BULAN_ID):
+                    if val:
+                        hasil[label.capitalize()] = val
+                    k += 1
+                    continue
+                break
+        i += 1
+    return hasil
+
+def _auto_keterangan(bulan, inf, ihk_val):
+    """Susun kalimat keterangan otomatis dari angka Yoy/MtM/IHK yang tersedia,
+    dipakai kalau tidak ada kolom Keterangan/Penyebab manual di spreadsheet."""
+    if inf.get("keterangan"):
+        return inf["keterangan"]
+    kalimat = []
+    if inf.get("yoy"):
+        kalimat.append(f"Inflasi tahun ke tahun (year on year) {bulan} 2026 tercatat sebesar {inf['yoy']}.")
+    if inf.get("mtm"):
+        v = _parse_id_number(inf["mtm"])
+        if v is not None:
+            arah = "naik" if v > 0 else ("turun" if v < 0 else "stabil")
+            kalimat.append(f"Secara bulanan (month to month), harga {arah} {abs(v):.2f}% dibanding bulan sebelumnya.")
+        else:
+            kalimat.append(f"Inflasi bulanan (month to month) tercatat {inf['mtm']}.")
+    if ihk_val:
+        kalimat.append(f"Indeks Harga Konsumen (IHK) bulan ini sebesar {ihk_val}.")
+    return " ".join(kalimat)
+
 def _build_inflasi_gabungan():
-    """Gabungkan sheet 'Inflasi 2026' & 'IHK 2026' jadi satu tabel: Bulan,
-    Inflasi (%), IHK, dan Keterangan (penyebab) — diurutkan Januari-Desember."""
-    df_inf = _worksheet_to_df(SHEET_NAME_INFLASI)
-    df_ihk = _worksheet_to_df(SHEET_NAME_IHK)
+    ss = get_inflasi_spreadsheet()
 
-    if df_inf.empty:
-        return pd.DataFrame()
+    values_inf, values_ihk = [], []
+    try:
+        values_inf = ss.worksheet(SHEET_NAME_INFLASI).get_all_values()
+    except gspread.WorksheetNotFound:
+        pass
+    try:
+        values_ihk = ss.worksheet(SHEET_NAME_IHK).get_all_values()
+    except gspread.WorksheetNotFound:
+        pass
 
-    col_bulan_inf = _find_col(df_inf.columns, ["bulan"])
-    col_inflasi = _find_col(df_inf.columns, ["inflasi", "%"])
-    col_keterangan = _find_col(df_inf.columns, ["keterangan", "penyebab", "catatan"])
+    inflasi_map = _parse_inflasi_2026_sheet(values_inf) if values_inf else {}
+    ihk_map = _parse_ihk_2026_sheet(values_ihk) if values_ihk else {}
 
-    if not col_bulan_inf or not col_inflasi:
-        return pd.DataFrame()
+    all_bulan = set(inflasi_map.keys()) | set(ihk_map.keys())
+    rows = []
+    for bulan in all_bulan:
+        inf = inflasi_map.get(bulan, {})
+        ihk_val = ihk_map.get(bulan, "")
+        yoy, mtm = inf.get("yoy", ""), inf.get("mtm", "")
+        rows.append({
+            "Bulan": bulan,
+            "Inflasi (%)": yoy if yoy else mtm,
+            "Inflasi YoY (%)": yoy,
+            "Inflasi MtM (%)": mtm,
+            "IHK": ihk_val,
+            "Keterangan": _auto_keterangan(bulan, inf, ihk_val),
+        })
 
-    keep_cols = [col_bulan_inf, col_inflasi] + ([col_keterangan] if col_keterangan else [])
-    df = df_inf[keep_cols].copy()
-    df.columns = ["Bulan", "Inflasi (%)"] + (["Keterangan"] if col_keterangan else [])
-    if "Keterangan" not in df.columns:
-        df["Keterangan"] = ""
-
-    if not df_ihk.empty:
-        col_bulan_ihk = _find_col(df_ihk.columns, ["bulan"])
-        col_ihk = _find_col(df_ihk.columns, ["ihk"])
-        if col_bulan_ihk and col_ihk:
-            df_ihk_slim = df_ihk[[col_bulan_ihk, col_ihk]].copy()
-            df_ihk_slim.columns = ["Bulan", "IHK"]
-            df = df.merge(df_ihk_slim, on="Bulan", how="left")
-    if "IHK" not in df.columns:
-        df["IHK"] = ""
-
-    df = df[df["Bulan"].astype(str).str.strip() != ""].copy()
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return df
     df["Inflasi_num"] = df["Inflasi (%)"].apply(_parse_id_number)
     df["_urut"] = df["Bulan"].apply(_bulan_sort_key)
     df = df.sort_values("_urut").drop(columns="_urut").reset_index(drop=True)
     return df
 
-@st.cache_data(ttl=300, show_spinner=False)
+# TTL diperpendek dari 60 -> 30 detik supaya perubahan di spreadsheet
+# (bulan baru, angka yang diedit, dsb) lebih cepat muncul otomatis di aplikasi.
+@st.cache_data(ttl=30, show_spinner=False)
 def _load_inflasi_gabungan_cached():
     return _build_inflasi_gabungan()
 
 def load_inflasi_gabungan():
-    """Ambil data inflasi+IHK gabungan (di-cache 5 menit). Kalau gagal (mis.
-    sheet belum di-share, atau nama sheet/kolom tidak cocok), simpan pesan
-    errornya supaya bisa ditampilkan ke admin, dan kembalikan tabel kosong."""
+    """Ambil data inflasi+IHK gabungan (di-cache 30 detik supaya perubahan di
+    spreadsheet cepat terbaca tapi API Google Sheets tidak dibebani tiap klik).
+    Kalau gagal, simpan pesan error untuk ditampilkan ke admin."""
     try:
         return _load_inflasi_gabungan_cached()
     except Exception as e:
@@ -787,7 +862,7 @@ if is_admin:
 
         st.divider()
         st.subheader("📊 Data Inflasi & IHK (dari Spreadsheet)")
-        st.caption("Diambil langsung dari sheet 'Inflasi 2026' & 'IHK 2026' di spreadsheet Anda. Edit angka/keterangannya di spreadsheet, lalu klik refresh di bawah — tidak perlu diisi ulang di sini.")
+        st.caption("Diambil langsung dari sheet 'Inflasi 2026' & 'IHK 2026' di spreadsheet Anda. Edit angka/keterangannya di spreadsheet — aplikasi akan otomatis membaca ulang tiap 30 detik, atau klik refresh di bawah untuk langsung memuat ulang.")
         st.link_button("📝 Buka Spreadsheet Sumber Data", INFLASI_SPREADSHEET_URL, use_container_width=True)
 
         if st.session_state.pop("_inflasi_load_error", None):
@@ -800,7 +875,7 @@ if is_admin:
         df_inflasi_admin = load_inflasi_gabungan()
         if not df_inflasi_admin.empty:
             st.dataframe(
-                df_inflasi_admin[["Bulan", "Inflasi (%)", "IHK", "Keterangan"]],
+                df_inflasi_admin[["Bulan", "Inflasi YoY (%)", "Inflasi MtM (%)", "IHK", "Keterangan"]],
                 use_container_width=True, hide_index=True,
             )
         else:
@@ -948,10 +1023,21 @@ if st.session_state.page == "Beranda":
 
     # ------------------------------------------------------------------
     # INFLASI & IHK KABUPATEN NGADA (sumber: spreadsheet pribadi)
+    # Cache di-refresh otomatis tiap 30 detik + tombol refresh manual
+    # yang bisa dipakai siapa saja (bukan hanya admin) agar grafik
+    # langsung menampilkan angka bulan terbaru begitu spreadsheet diedit.
     # ------------------------------------------------------------------
     st.write("")
-    st.markdown('<span class="section-eyebrow">Data Inflasi</span>', unsafe_allow_html=True)
-    st.markdown("### 📊 Inflasi & IHK Kabupaten Ngada 2026")
+    col_title, col_refresh = st.columns([5, 1])
+    with col_title:
+        st.markdown('<span class="section-eyebrow">Data Inflasi</span>', unsafe_allow_html=True)
+        st.markdown("### 📊 Inflasi & IHK Kabupaten Ngada 2026")
+    with col_refresh:
+        st.write("")
+        st.write("")
+        if st.button("🔄 Refresh", key="refresh_inflasi_public", use_container_width=True):
+            _load_inflasi_gabungan_cached.clear()
+            st.rerun()
 
     df_inflasi = load_inflasi_gabungan()
     if is_admin and st.session_state.get("_inflasi_load_error"):
@@ -960,13 +1046,21 @@ if st.session_state.page == "Beranda":
     if df_inflasi.empty:
         st.info("Data inflasi belum tersedia. Pastikan sheet 'Inflasi 2026' dan 'IHK 2026' pada spreadsheet Anda sudah terisi dan sudah dibagikan ke akun aplikasi.")
     else:
-        terakhir = df_inflasi.iloc[-1]
+        # Ambil baris bulan terakhir yang benar-benar punya data (bukan baris kosong
+        # yang mungkin ikut kebawa kalau ada sel header ganjil di spreadsheet).
+        df_valid = df_inflasi[
+            df_inflasi["Inflasi_num"].notna()
+            | df_inflasi["IHK"].astype(str).str.strip().ne("")
+        ]
+        terakhir = df_valid.iloc[-1] if not df_valid.empty else df_inflasi.iloc[-1]
 
-        c1, c2 = st.columns(2)
-        nilai_inflasi = terakhir["Inflasi (%)"]
-        c1.metric(f"Inflasi — {terakhir['Bulan']}", f"{nilai_inflasi}%" if str(nilai_inflasi).strip() else "-")
+        c1, c2, c3 = st.columns(3)
+        if str(terakhir.get("Inflasi YoY (%)", "")).strip():
+            c1.metric(f"Inflasi YoY — {terakhir['Bulan']}", f"{terakhir['Inflasi YoY (%)']}")
+        if str(terakhir.get("Inflasi MtM (%)", "")).strip():
+            c2.metric("Inflasi MtM", f"{terakhir['Inflasi MtM (%)']}")
         if str(terakhir.get("IHK", "")).strip():
-            c2.metric("Indeks Harga Konsumen (IHK)", f"{terakhir['IHK']}")
+            c3.metric("Indeks Harga Konsumen (IHK)", f"{terakhir['IHK']}")
 
         if df_inflasi["Inflasi_num"].notna().sum() >= 1:
             fig_inf = px.line(
@@ -985,15 +1079,13 @@ if st.session_state.page == "Beranda":
         if keterangan:
             st.markdown(f"""
             <div class="price-card">
-                <strong>Keterangan / Penyebab Inflasi — {terakhir['Bulan']}:</strong><br>{keterangan}
+                <strong>Keterangan — Inflasi {terakhir['Bulan']} 2026:</strong><br>{keterangan}
             </div>
             """, unsafe_allow_html=True)
-        else:
-            st.caption("Belum ada keterangan penyebab inflasi untuk bulan ini di spreadsheet.")
 
         with st.expander("📋 Lihat rincian tiap bulan"):
             st.dataframe(
-                df_inflasi[["Bulan", "Inflasi (%)", "IHK", "Keterangan"]],
+                df_inflasi[["Bulan", "Inflasi YoY (%)", "Inflasi MtM (%)", "IHK", "Keterangan"]],
                 use_container_width=True, hide_index=True,
             )
 
