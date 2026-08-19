@@ -8,6 +8,8 @@ import hashlib
 import uuid
 import re
 import gspread
+import requests
+from bs4 import BeautifulSoup
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 
@@ -143,42 +145,7 @@ def delete_comment(comment_id):
         st.error(f"Gagal menghapus komentar: {e}")
         return False
 
-# Inisialisasi State agar tidak NameError
-if "store" not in st.session_state:
-    st.session_state.store = load_settings()
-
-# Jika API sedang kena limit kuota, JANGAN timpa komentar lama dengan kosong —
-# pertahankan data terakhir yang berhasil dimuat supaya tampilan tidak "hilang" tiba-tiba.
-_new_comments = load_comments()
-if _new_comments is not None:
-    st.session_state.comments = _new_comments
-elif "comments" not in st.session_state:
-    st.session_state.comments = {}
-
-if 'page' not in st.session_state:
-    st.session_state.page = "Beranda"
-
-is_admin = st.query_params.get("status") == "set"
-
-# Kalau tadi gagal ambil komentar (mis. kena limit kuota Google Sheets sesaat),
-# beri tahu admin saja secara halus — pengunjung biasa tidak perlu lihat pesan teknis ini.
-if is_admin and st.session_state.pop("_comments_load_error", None):
-    st.caption("⚠️ Komentar terbaru belum sempat dimuat ulang (server Google Sheets sedang sibuk). Menampilkan data terakhir yang tersimpan — coba lagi sebentar.")
-
-# --- 3. HELPER GAMBAR & CSS ---
-def get_base64(file):
-    if os.path.exists(file):
-        with open(file, "rb") as f: return base64.b64encode(f.read()).decode()
-    return ""
-
-img_pimpinan = get_base64("Bupati-dan-Wakil-Bupati-Ngada-jpg.jpeg")
-img_logo = get_base64("logo_ngada.png")
-
-# --- 3a. GAMBAR YANG DIUPLOAD ADMIN — DISIMPAN PERMANEN DI GOOGLE SHEETS ---
-# PENTING: sebelumnya gambar disimpan di disk server, yang RESET setiap Streamlit Cloud
-# tidur/redeploy — makanya sering "hilang keesokan harinya". Sekarang gambar (versi
-# terkompresi) disimpan sebagai teks base64 di worksheet "Images" pada Spreadsheet yang
-# sama dengan komentar, jadi permanen persis seperti komentar tidak pernah hilang.
+# --- 2b. GAMBAR YANG DIUPLOAD ADMIN — DISIMPAN PERMANEN DI GOOGLE SHEETS ---
 IMAGES_SHEET_HEADER = ["id", "target", "caption", "data_b64", "mime", "tanggal"]
 
 @st.cache_resource(show_spinner=False)
@@ -214,7 +181,7 @@ def _load_images_cached():
             "mime": r.get("mime", "image/jpeg"),
         }
         if target == "hero":
-            hero = entry  # kalau ada beberapa baris hero (seharusnya tidak), pakai yang terakhir
+            hero = entry
         elif target == "galeri:pertanian":
             galeri["pertanian"].append(entry)
         elif target == "galeri:pariwisata":
@@ -245,7 +212,7 @@ def compress_image_for_sheets(file_bytes, max_chars=45000):
         else:
             max_width = int(max_width * 0.75)
             quality = 60
-    return b64, "image/jpeg"  # fallback: kirim yang terkecil yang berhasil dibuat
+    return b64, "image/jpeg"
 
 def add_image_record(target, caption, file_bytes):
     try:
@@ -278,7 +245,7 @@ def set_hero_image(file_bytes):
     try:
         ws = get_images_ws()
         for cell in sorted(ws.findall("hero"), key=lambda c: c.row, reverse=True):
-            if cell.col == 2:  # kolom "target"
+            if cell.col == 2:
                 ws.delete_rows(cell.row)
         b64, mime = compress_image_for_sheets(file_bytes)
         rid = str(uuid.uuid4())[:8]
@@ -302,13 +269,11 @@ def reset_hero_image():
         st.error(f"Gagal mereset foto beranda: {e}")
         return False
 
-# Foto default bawaan repo (fallback kalau admin belum pernah upload foto sendiri).
 IMAGE_SLOTS = {
     "hero": {"label": "Foto Beranda (Hero)", "default": "IMG_20251125_111048.jpg"},
 }
 
 def get_image_path(slot):
-    """Prioritas: gambar yang diupload admin (permanen di Google Sheets) > foto default dari repo."""
     images_data = load_images()
     if images_data and images_data.get("hero") and slot == "hero":
         try:
@@ -320,9 +285,7 @@ def get_image_path(slot):
         return default
     return None
 
-# --- 3b. GALERI POTENSI (Pertanian & Pariwisata) — admin bisa TAMBAH banyak foto + keterangan ---
-# Foto lama (Cengkeh, Sawah, Bena, Riung) dari repo tetap tampil duluan sebagai bawaan.
-# Foto yang ditambah admin lewat form disimpan permanen di Google Sheets (worksheet "Images").
+# --- 2c. GALERI POTENSI (Pertanian & Pariwisata) ---
 GALERI_DEFAULT = {
     "pertanian": [
         {"file": "cengkeh.jpeg", "caption": "Cengkeh Ngada"},
@@ -336,7 +299,6 @@ GALERI_DEFAULT = {
 GALERI_LABELS = {"pertanian": "🌾 Pertanian", "pariwisata": "🏞️ Pariwisata"}
 
 def get_galeri(category):
-    """Gabungkan foto bawaan repo (permanen via git) + foto upload admin (permanen via Google Sheets)."""
     items = []
     for it in GALERI_DEFAULT.get(category, []):
         if os.path.exists(it["file"]):
@@ -353,6 +315,251 @@ def get_galeri(category):
             except Exception:
                 pass
     return items
+
+# ============================================================================
+# --- 2d. INFLASI KABUPATEN NGADA — DITARIK OTOMATIS DARI BPS TIAP BULAN ---
+# Sumber: ngadakab.bps.go.id (Berita Resmi Statistik). Data disimpan permanen
+# di worksheet "Inflasi" pada Spreadsheet yang sama dengan Comments & Images,
+# jadi historinya menumpuk otomatis tiap bulan dan tidak pernah hilang.
+# ============================================================================
+
+BPS_LIST_URL = "https://ngadakab.bps.go.id/id/pressrelease"
+BPS_BASE_URL = "https://ngadakab.bps.go.id"
+BPS_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; PortalEkonomiNgada/1.0)"}
+
+INFLASI_SHEET_HEADER = [
+    "bulan_tahun", "urutan", "bulan", "tahun", "ihk",
+    "inflasi_yoy", "arah_mtm", "inflasi_mtm", "arah_ytd", "inflasi_ytd",
+    "penyebab_naik", "penyebab_turun", "catatan_admin",
+    "sumber_url", "pdf_url", "tanggal_rilis", "tanggal_scrape",
+]
+
+BULAN_ID = ["januari", "februari", "maret", "april", "mei", "juni", "juli",
+            "agustus", "september", "oktober", "november", "desember"]
+
+@st.cache_resource(show_spinner=False)
+def get_inflasi_ws():
+    client = get_gspread_client()
+    sheet = client.open_by_url(st.secrets["COMMENTS_SHEET_URL"])
+    try:
+        ws = sheet.worksheet("Inflasi")
+    except gspread.WorksheetNotFound:
+        ws = sheet.add_worksheet(title="Inflasi", rows=500, cols=len(INFLASI_SHEET_HEADER))
+        ws.append_row(INFLASI_SHEET_HEADER)
+    return ws
+
+def load_inflasi_history():
+    try:
+        return _load_inflasi_history_cached()
+    except Exception as e:
+        st.session_state["_inflasi_load_error"] = str(e)
+        return None
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_inflasi_history_cached():
+    ws = get_inflasi_ws()
+    records = ws.get_all_records()
+    if not records:
+        return pd.DataFrame()
+    df = pd.DataFrame(records)
+    df = df.sort_values("urutan")
+    return df.reset_index(drop=True)
+
+def _parse_id_number(value):
+    v = str(value).replace(",", ".").strip()
+    try:
+        return float(v)
+    except ValueError:
+        return None
+
+def scrape_latest_inflasi():
+    """Ambil rilis inflasi BPS Ngada TERBARU dari halaman arsip Berita Resmi
+    Statistik, lalu ekstrak angka & penyebabnya. Mengembalikan dict, atau
+    None kalau gagal (situs berubah format / sedang down / dsb)."""
+    resp = requests.get(BPS_LIST_URL, headers=BPS_HEADERS, timeout=20)
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    kandidat = []
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        teks = a.get_text(" ", strip=True)
+        m = re.search(r"/pressrelease/(\d{4})/(\d{2})/(\d{2})/(\d+)/", href)
+        if not m:
+            continue
+        if "inflasi" not in teks.lower() and "inflasi" not in href.lower():
+            continue
+        tahun, bulan_num, tgl, rid = m.groups()
+        url_lengkap = href if href.startswith("http") else BPS_BASE_URL + href
+        kandidat.append(((int(tahun), int(bulan_num), int(tgl), int(rid)), url_lengkap))
+
+    if not kandidat:
+        return None
+    kandidat.sort(key=lambda x: x[0], reverse=True)
+    url_rilis = kandidat[0][1]
+
+    resp2 = requests.get(url_rilis, headers=BPS_HEADERS, timeout=20)
+    resp2.raise_for_status()
+    soup2 = BeautifulSoup(resp2.text, "html.parser")
+    teks = soup2.get_text("\n", strip=True)
+
+    hasil = {
+        "sumber_url": url_rilis,
+        "pdf_url": "",
+        "tanggal_rilis": "",
+        "tanggal_scrape": datetime.now().strftime("%d %b %Y, %H:%M"),
+    }
+
+    for a in soup2.find_all("a", href=True):
+        if "unduh berita resmi statistik" in a.get_text(" ", strip=True).lower():
+            hasil["pdf_url"] = a["href"]
+            break
+
+    m_tgl = re.search(r"Tanggal Rilis\s*:?\s*\n?\s*([0-9]{1,2}\s+\w+\s+\d{4})", teks, re.IGNORECASE)
+    if m_tgl:
+        hasil["tanggal_rilis"] = m_tgl.group(1)
+
+    m_utama = re.search(
+        r"Pada\s+(\w+)\s+(\d{4})\s+terjadi inflasi year on year\s*\(y-on-y\)\s*"
+        r"Kabupaten Ngada sebesar\s+([\d,]+)\s*persen dengan Indeks Harga Konsumen\s*"
+        r"\(IHK\)\s*sebesar\s+([\d,]+)",
+        teks, re.IGNORECASE,
+    )
+    if not m_utama:
+        return None
+
+    bulan_txt, tahun_txt, inflasi_yoy, ihk = m_utama.groups()
+    bulan_lower = bulan_txt.lower()
+    if bulan_lower not in BULAN_ID:
+        return None
+    bulan_num = BULAN_ID.index(bulan_lower) + 1
+
+    hasil.update({
+        "bulan": bulan_txt.capitalize(),
+        "tahun": tahun_txt,
+        "bulan_tahun": f"{bulan_txt.capitalize()} {tahun_txt}",
+        "urutan": f"{tahun_txt}{bulan_num:02d}",
+        "ihk": ihk,
+        "inflasi_yoy": inflasi_yoy,
+    })
+
+    m_mtm = re.search(
+        r"tingkat (inflasi|deflasi) month to month\s*\(m-to-m\)\s*sebesar\s+([\d,]+)\s*persen",
+        teks, re.IGNORECASE,
+    )
+    hasil["arah_mtm"] = m_mtm.group(1).lower() if m_mtm else ""
+    hasil["inflasi_mtm"] = m_mtm.group(2) if m_mtm else ""
+
+    m_ytd = re.search(
+        r"tingkat (inflasi|deflasi) year to date\s*\(y-to-d\)\s*sebesar\s+([\d,]+)\s*persen",
+        teks, re.IGNORECASE,
+    )
+    hasil["arah_ytd"] = m_ytd.group(1).lower() if m_ytd else ""
+    hasil["inflasi_ytd"] = m_ytd.group(2) if m_ytd else ""
+
+    m_sebab = re.search(
+        r"(Inflasi y-on-y terjadi karena.*?)(?:Pada\s+(?:bulan\s+)?\w+\s+\d{4}\s+secara month to month|$)",
+        teks, re.DOTALL | re.IGNORECASE,
+    )
+    naik_list, turun_list = [], []
+    if m_sebab:
+        blok = m_sebab.group(1)
+        bagian = re.split(
+            r"Sementara itu,?\s*kelompok pengeluaran lain mengalami penurunan,?\s*yaitu\s*",
+            blok, maxsplit=1, flags=re.IGNORECASE,
+        )
+        teks_naik = bagian[0]
+        teks_turun = bagian[1] if len(bagian) > 1 else ""
+        naik_list = re.findall(r"kelompok\s+([^,;]+?)\s+sebesar\s+([\d,]+)\s*persen", teks_naik, re.IGNORECASE)
+        turun_list = re.findall(r"kelompok\s+([^,;]+?)\s+sebesar\s+([\d,]+)\s*persen", teks_turun, re.IGNORECASE)
+
+    hasil["penyebab_naik"] = json.dumps(naik_list)
+    hasil["penyebab_turun"] = json.dumps(turun_list)
+    hasil["catatan_admin"] = ""
+    return hasil
+
+@st.cache_data(ttl=21600, show_spinner=False)  # cek situs BPS maksimal tiap 6 jam
+def _scrape_latest_inflasi_cached():
+    return scrape_latest_inflasi()
+
+def sync_inflasi_data():
+    """Cek rilis terbaru BPS; kalau bulan itu belum pernah tersimpan, simpan
+    permanen ke Google Sheets. Aman dipanggil tiap kali app dibuka — tidak
+    akan dobel entri dan tidak menimpa catatan_admin yang sudah diisi manual."""
+    try:
+        data_baru = _scrape_latest_inflasi_cached()
+    except Exception as e:
+        st.session_state["_inflasi_scrape_error"] = str(e)
+        return False
+
+    if not data_baru:
+        st.session_state["_inflasi_scrape_error"] = "Format halaman BPS tidak dikenali atau situs tidak dapat diakses."
+        return False
+
+    try:
+        ws = get_inflasi_ws()
+        existing = ws.col_values(1)  # kolom bulan_tahun
+        if data_baru["bulan_tahun"] not in existing:
+            row = [data_baru.get(col, "") for col in INFLASI_SHEET_HEADER]
+            ws.append_row(row)
+            _load_inflasi_history_cached.clear()
+            return True
+        return False
+    except Exception as e:
+        st.session_state["_inflasi_scrape_error"] = f"Gagal menyimpan: {e}"
+        return False
+
+def update_inflasi_catatan(bulan_tahun, catatan):
+    try:
+        ws = get_inflasi_ws()
+        cell = ws.find(bulan_tahun)
+        if cell:
+            col_idx = INFLASI_SHEET_HEADER.index("catatan_admin") + 1
+            ws.update_cell(cell.row, col_idx, catatan)
+            _load_inflasi_history_cached.clear()
+            return True
+        return False
+    except Exception as e:
+        st.error(f"Gagal menyimpan catatan: {e}")
+        return False
+
+
+# Inisialisasi State agar tidak NameError
+if "store" not in st.session_state:
+    st.session_state.store = load_settings()
+
+# Jika API sedang kena limit kuota, JANGAN timpa komentar lama dengan kosong —
+# pertahankan data terakhir yang berhasil dimuat supaya tampilan tidak "hilang" tiba-tiba.
+_new_comments = load_comments()
+if _new_comments is not None:
+    st.session_state.comments = _new_comments
+elif "comments" not in st.session_state:
+    st.session_state.comments = {}
+
+# Sinkronisasi data inflasi BPS — cukup sekali per sesi, dibatasi cache 6 jam
+# di dalam fungsinya sendiri supaya situs BPS tidak dibebani tiap refresh.
+if "inflasi_synced" not in st.session_state:
+    sync_inflasi_data()
+    st.session_state.inflasi_synced = True
+
+if 'page' not in st.session_state:
+    st.session_state.page = "Beranda"
+
+is_admin = st.query_params.get("status") == "set"
+
+# Kalau tadi gagal ambil komentar (mis. kena limit kuota Google Sheets sesaat),
+# beri tahu admin saja secara halus — pengunjung biasa tidak perlu lihat pesan teknis ini.
+if is_admin and st.session_state.pop("_comments_load_error", None):
+    st.caption("⚠️ Komentar terbaru belum sempat dimuat ulang (server Google Sheets sedang sibuk). Menampilkan data terakhir yang tersimpan — coba lagi sebentar.")
+
+# --- 3. HELPER GAMBAR & CSS ---
+def get_base64(file):
+    if os.path.exists(file):
+        with open(file, "rb") as f: return base64.b64encode(f.read()).decode()
+    return ""
+
+img_pimpinan = get_base64("Bupati-dan-Wakil-Bupati-Ngada-jpg.jpeg")
+img_logo = get_base64("logo_ngada.png")
 
 st.markdown(f"""
     <style>
@@ -669,6 +876,49 @@ if is_admin:
                         st.warning("Pilih foto dan isi keterangannya terlebih dahulu.")
 
         st.divider()
+        st.subheader("📊 Data Inflasi BPS")
+        st.caption("Ditarik otomatis tiap bulan dari ngadakab.bps.go.id. Sistem mengecek rilis baru maksimal tiap 6 jam.")
+
+        if st.session_state.pop("_inflasi_scrape_error", None):
+            st.warning("⚠️ Gagal mengambil data terbaru dari BPS secara otomatis barusan. Data lama (kalau ada) tetap ditampilkan ke pengunjung. Coba klik cek ulang, atau isi manual di bawah kalau perlu.")
+
+        if st.button("🔄 Cek Rilis BPS Sekarang", use_container_width=True):
+            _scrape_latest_inflasi_cached.clear()
+            if sync_inflasi_data():
+                st.success("Data inflasi baru ditemukan & tersimpan!")
+                st.rerun()
+            else:
+                st.info("Belum ada rilis baru dari BPS, atau data bulan ini sudah tersimpan sebelumnya.")
+
+        df_inflasi_admin = load_inflasi_history()
+        if df_inflasi_admin is not None and not df_inflasi_admin.empty:
+            terakhir_admin = df_inflasi_admin.iloc[-1]
+            st.write(f"**Data terakhir:** {terakhir_admin['bulan_tahun']} — Inflasi y-on-y {terakhir_admin['inflasi_yoy']}%, IHK {terakhir_admin['ihk']}")
+
+            naik_admin = json.loads(terakhir_admin.get("penyebab_naik") or "[]")
+            turun_admin = json.loads(terakhir_admin.get("penyebab_turun") or "[]")
+            if naik_admin or turun_admin:
+                st.caption("Penyebab berhasil diambil otomatis dari halaman BPS ✅")
+            else:
+                st.caption("BPS belum mencantumkan rincian penyebab di halaman web bulan ini. Isi ringkasannya secara manual di bawah (baca dari PDF resmi BPS).")
+
+            catatan_baru = st.text_area(
+                "Catatan penyebab (opsional, tampil di Beranda)",
+                value=terakhir_admin.get("catatan_admin", ""),
+                key="catatan_inflasi_admin",
+                height=100,
+            )
+            if st.button("💾 Simpan Catatan Penyebab", use_container_width=True):
+                if update_inflasi_catatan(terakhir_admin["bulan_tahun"], catatan_baru.strip()):
+                    st.success("Catatan tersimpan!")
+                    st.rerun()
+
+            if terakhir_admin.get("pdf_url"):
+                st.link_button("⬇️ Buka PDF Resmi BRS Bulan Ini", terakhir_admin["pdf_url"], use_container_width=True)
+        else:
+            st.caption("Belum ada data inflasi tersimpan. Klik 'Cek Rilis BPS Sekarang' di atas.")
+
+        st.divider()
         st.subheader("💬 Moderasi & Balasan Komentar")
         if st.session_state.comments:
             for k, item in st.session_state.comments.items():
@@ -808,6 +1058,85 @@ if st.session_state.page == "Beranda":
     if hero_img:
         st.image(hero_img, use_container_width=True)
 
+    # ------------------------------------------------------------------
+    # INFLASI KABUPATEN NGADA (otomatis dari BPS)
+    # ------------------------------------------------------------------
+    st.write("")
+    st.markdown('<span class="section-eyebrow">Data Resmi BPS</span>', unsafe_allow_html=True)
+    st.markdown("### 📊 Inflasi Kabupaten Ngada")
+
+    df_inflasi = load_inflasi_history()
+    if df_inflasi is None or df_inflasi.empty:
+        st.info("Data inflasi belum tersedia. Sistem akan mengambilnya otomatis dari BPS Kabupaten Ngada saat tersedia.")
+    else:
+        terakhir = df_inflasi.iloc[-1]
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric(f"Inflasi y-on-y — {terakhir['bulan_tahun']}", f"{terakhir['inflasi_yoy']}%")
+        if terakhir.get("inflasi_mtm"):
+            tanda = "+" if terakhir.get("arah_mtm") == "inflasi" else "-"
+            c2.metric("Bulan ke Bulan (m-to-m)", f"{tanda}{terakhir['inflasi_mtm']}%")
+        if terakhir.get("inflasi_ytd"):
+            tanda = "+" if terakhir.get("arah_ytd") == "inflasi" else "-"
+            c3.metric("Sejak Awal Tahun (y-to-d)", f"{tanda}{terakhir['inflasi_ytd']}%")
+
+        st.caption(f"Indeks Harga Konsumen (IHK): {terakhir['ihk']} · Sumber: BPS Kabupaten Ngada, rilis {terakhir.get('tanggal_rilis','-')}")
+
+        if len(df_inflasi) >= 2:
+            df_chart = df_inflasi.copy()
+            df_chart["inflasi_yoy_num"] = df_chart["inflasi_yoy"].apply(_parse_id_number)
+            fig_inf = px.line(
+                df_chart, x="bulan_tahun", y="inflasi_yoy_num", markers=True,
+                labels={"bulan_tahun": "", "inflasi_yoy_num": "Inflasi y-on-y (%)"},
+            )
+            fig_inf.update_traces(line_color="#A6432B")
+            fig_inf.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(family="Plus Jakarta Sans, sans-serif", color="#22201B"),
+                height=280, margin=dict(l=10, r=10, t=20, b=10),
+            )
+            st.plotly_chart(fig_inf, use_container_width=True)
+
+        naik = json.loads(terakhir.get("penyebab_naik") or "[]")
+        turun = json.loads(terakhir.get("penyebab_turun") or "[]")
+        catatan_admin = terakhir.get("catatan_admin", "")
+
+        if naik or turun:
+            colx, coly = st.columns(2)
+            with colx:
+                st.markdown("**📈 Kelompok pengeluaran yang naik**")
+                if naik:
+                    for nama, persen in naik:
+                        st.write(f"- {nama.strip().capitalize()}: {persen}%")
+                else:
+                    st.caption("Tidak ada data.")
+            with coly:
+                st.markdown("**📉 Kelompok pengeluaran yang turun**")
+                if turun:
+                    for nama, persen in turun:
+                        st.write(f"- {nama.strip().capitalize()}: {persen}%")
+                else:
+                    st.caption("Tidak ada data.")
+
+        if catatan_admin:
+            st.markdown(f"""
+            <div class="price-card">
+                <strong>Catatan Bagian Perekonomian & SDA:</strong><br>{catatan_admin}
+            </div>
+            """, unsafe_allow_html=True)
+        elif not (naik or turun):
+            st.caption("Rincian penyebab kenaikan/penurunan harga bulan ini belum dicantumkan BPS di halaman ringkasan — lihat PDF resmi di bawah.")
+
+        bcol1, bcol2 = st.columns(2)
+        with bcol1:
+            if terakhir.get("sumber_url"):
+                st.link_button("📄 Baca Rilis Resmi BPS", terakhir["sumber_url"], use_container_width=True)
+        with bcol2:
+            if terakhir.get("pdf_url"):
+                st.link_button("⬇️ Unduh PDF Resmi (BRS)", terakhir["pdf_url"], use_container_width=True)
+
+    # ------------------------------------------------------------------
+
     st.write("")
     st.markdown('<span class="section-eyebrow">Suara Pengunjung</span>', unsafe_allow_html=True)
     st.markdown("### 💬 Komentar & Rating Pengunjung")
@@ -909,7 +1238,6 @@ elif st.session_state.page == "Media":
 
             if link and "http" in link:
                 if _is_youtube(link):
-                    # Video YouTube langsung diputar di halaman, tinggal klik play.
                     st.video(link)
                 elif _is_pdf(link, tipe):
                     drive_id = _drive_file_id(link)
