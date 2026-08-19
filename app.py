@@ -953,6 +953,59 @@ def compute_trending(df, n=6):
     d = d.sort_values('pct', ascending=False)
     return d.head(n)
 
+# --- 7a-2. KETERANGAN HARGA OTOMATIS (naik/turun mingguan) ---
+BULAN_ID_LABEL = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli",
+                   "Agustus", "September", "Oktober", "November", "Desember"]
+MINGGU_ORDINAL = ["pertama", "kedua", "ketiga", "keempat", "kelima"]
+
+def _minggu_ke_index(tanggal):
+    return min((tanggal.day - 1) // 7, 4)
+
+def _format_rupiah(nilai):
+    return f"Rp. {abs(int(nilai)):,}".replace(",", ".")
+
+def generate_keterangan_harga(df):
+    """Susun kalimat 'Keterangan' otomatis berdasarkan selisih harga pada data
+    terbaru (K_INI vs K_KMRN, fallback ke B_INI vs B_KMRN kalau harga kecil
+    tidak berubah). Dipanggil ulang setiap kali df_harga dimuat, jadi otomatis
+    mengikuti update terbaru di spreadsheet tanpa perlu diketik manual."""
+    if df.empty:
+        return ""
+    d = df[(df['SATUAN'] != 0) & (df['SATUAN'].astype(str) != "0")].copy()
+    if d.empty:
+        return ""
+
+    d['diff_k'] = d['K_INI'] - d['K_KMRN']
+    d['diff_b'] = d['B_INI'] - d['B_KMRN']
+    d['diff'] = d.apply(lambda r: r['diff_k'] if r['diff_k'] != 0 else r['diff_b'], axis=1)
+
+    naik = d[d['diff'] > 0]
+    turun = d[d['diff'] < 0]
+
+    def gabung(rows):
+        return ", ".join(f"{r['KOMODITAS']} {_format_rupiah(r['diff'])}" for _, r in rows.iterrows())
+
+    now = datetime.now()
+    bulan = BULAN_ID_LABEL[now.month - 1]
+    minggu = MINGGU_ORDINAL[_minggu_ke_index(now)]
+
+    if naik.empty and turun.empty:
+        return (f"Keterangan : Harga pada minggu {minggu} bulan {bulan} {now.year} "
+                f"tidak mengalami perubahan, seluruh harga masih stabil mengikuti "
+                f"harga pada minggu sebelumnya.")
+
+    kalimat = (f"Keterangan : Harga pada minggu {minggu} bulan {bulan} {now.year} "
+               f"terdapat kenaikan maupun penurunan harga, ")
+
+    bagian = []
+    if not naik.empty:
+        bagian.append(f"yang mengalami kenaikan yaitu {gabung(naik)}")
+    if not turun.empty:
+        bagian.append(f"Sedangkan yang mengalami penurunan yaitu {gabung(turun)}")
+    kalimat += ". ".join(bagian)
+    kalimat += ". Sedangkan yang lainnya stabil mengikuti harga pada minggu sebelumnya."
+    return kalimat
+
 # --- 7b. FUNGSI KOMENTAR & RATING ---
 def render_stars(value):
     full = int(round(value))
@@ -1101,6 +1154,15 @@ elif st.session_state.page == "Harga":
     st.markdown('<span class="section-eyebrow">Data Pasar Terkini</span>', unsafe_allow_html=True)
     st.markdown("### 🛍️ Pantauan Harga Pasar")
     query = st.text_input("🔍 Cari Nama Komoditas...", "").lower()
+
+    keterangan_otomatis = generate_keterangan_harga(df_harga)
+    if keterangan_otomatis:
+        st.markdown(f"""
+        <div class="price-card" style="border-left-color: var(--ngd-gold);">
+            {keterangan_otomatis}
+        </div>
+        """, unsafe_allow_html=True)
+
     if not df_harga.empty:
         filtered = df_harga[df_harga['KOMODITAS'].str.lower().str.contains(query)]
         for _, r in filtered.iterrows():
